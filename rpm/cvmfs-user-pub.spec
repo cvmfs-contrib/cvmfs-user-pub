@@ -10,6 +10,7 @@ Source0: https://github.com/DrDaveD/%{name}/releases/download/%{version}/%{name}
 
 Requires: httpd
 Requires: mod_wsgi
+Requires: mod_ssl
 Requires: cvmfs-server
 
 %description
