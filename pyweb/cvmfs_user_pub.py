@@ -10,6 +10,7 @@
 #  but can be anything that is unique per tarball.
 
 import os, threading, time
+import urlparse, urllib
 
 confcachetime = 300  # 5 minutes
 userpubconffile = '/etc/cvmfs-user-pub.conf'
@@ -21,6 +22,9 @@ userpubconfmodtime = 0
 alloweddnsmodtime = 0
 conflock = threading.Lock()
 
+def logmsg(ip, id, msg):
+    print '(' + ip + ' ' + id + ') '+ msg
+
 def error_request(start_response, response_code, response_body):
     response_body = response_body + '\n'
     start_response(response_code,
@@ -28,9 +32,10 @@ def error_request(start_response, response_code, response_body):
                     ('Content-Length', str(len(response_body)))])
     return [response_body]
 
-def bad_request(start_response, reason):
-    response_body = 'Bad Request: ' + reason
-    return error_request(start_response, '400 Bad Request', response_body)
+def bad_request(start_response, ip, id, reason):
+    response_body = 'Bad request: ' + reason
+    logmsg(ip, id, 'bad request: ' + reason)
+    return error_request(start_response, '400 Bad request', response_body)
 
 def good_request(start_response, response_body):
     response_code = '200 OK'
@@ -39,10 +44,6 @@ def good_request(start_response, response_body):
                    ('Cache-control', 'max-age=0'),
                    ('Content-Length', str(len(response_body)))])
     return [response_body]
-
-mypid = '[' + str(os.getpid()) + ']'
-def logmsg(msg):
-    print '[' + mypid + '] ' + msg
 
 def parse_conf():
     global userpubconfmodtime
@@ -54,15 +55,18 @@ def parse_conf():
             # no change
             return userpubconf
         userpubconfmodtime = modtime
-        logmsg('reading ' + userpubconffile)
+        logmsg('-', '-', 'reading ' + userpubconffile)
         for line in open(userpubconffile, 'r').read().split('\n'):
             line = line.split('#',1)[0]  # removes comments
             words = line.split(None,1)
             if len(words) < 2:
                 continue
-            newconf[words[0]] = words[1]
+            if words[0] in newconf:
+                newconf[words[0]].append(words[1])
+            else:
+                newconf[words[0]] = [words[1]]
     except Exception, e:
-        logmsg('error reading ' + userpubconffile + ', continuing: ' + str(e))
+        logmsg('-', '-', 'error reading ' + userpubconffile + ', continuing: ' + str(e))
         userpubconfmodtime = savemodtime
         return userpubconf
     return newconf
@@ -77,7 +81,7 @@ def parse_alloweddns():
             # no change
             return alloweddns
         alloweddnsmodtime = modtime
-        logmsg('reading ' + alloweddnsfile)
+        logmsg('-', '-', 'reading ' + alloweddnsfile)
         for line in open(alloweddnsfile, 'r').read().split('\n'):
             # take the part between double quotes
             if len(line) == 0 or line[0] == '#':
@@ -86,13 +90,18 @@ def parse_alloweddns():
             if len(parts) > 2:
                 newdns.add(parts[1])
     except Exception, e:
-        logmsg('error reading ' + alloweddnsfile + ', continuing: ' + str(e))
+        logmsg('-', '-', 'error reading ' + alloweddnsfile + ', continuing: ' + str(e))
         alloweddnsmodtime = savemodtime
         return alloweddns
 
     return newdns
 
 def dispatch(environ, start_response):
+    if 'REMOTE_ADDR' not in environ:
+        logmsg('-', '-', 'No REMOTE_ADDR')
+        return bad_request(start_response, 'wpad-dispatch', '-', 'REMOTE_ADDR not set')
+    ip = environ['REMOTE_ADDR']
+
     now = int(time.time())
     global userpubconf
     global alloweddns
@@ -111,12 +120,52 @@ def dispatch(environ, start_response):
     conflock.release()
 
     if 'SSL_CLIENT_S_DN' not in environ:
-        logmsg('No client cert, access denied')
+        logmsg(ip, '-', 'No client cert, access denied')
         return error_request(start_response, '403 Access denied', 'Client cert required')
     dn = environ['SSL_CLIENT_S_DN']
     if dn not in dns:
-        logmsg('DN unrecognized, access denied: ' + dn)
+        logmsg(ip, '-', 'DN unrecognized, access denied: ' + dn)
         return error_request(start_response, '403 Access denied', 'Unrecognized DN')
 
-    body = 'hello ' + dn + '\n'
-    return good_request(start_response, body)
+    cnidx = dn.find('/CN=')
+    if cnidx < 0:
+        logmsg(ip, '-', 'No /CN=, access denied: ' + dn)
+        return error_request(start_response, '403 Access denied', 'Malformed DN')
+    uididx = dn.find('/CN=UID:')
+    if uididx >= 0:
+        cn = dn[uididx+8:]
+    else:
+        cn = dn[cnidx+4:]
+    endidx = cn.find('/')
+    if endidx >= 0:
+        cn = cn[0:endidx]
+
+    if 'PATH_INFO' not in environ:
+        return bad_request(start_response, ip, cn, 'No PATH_INFO')
+    pathinfo = environ['PATH_INFO']
+
+    cid = ''
+    if 'QUERY_STRING' in environ:
+        parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
+        if 'cid' in parameters:
+            cid = parameters['cid'][0]
+
+    if 'prefix' in conf:
+        prefix = conf['prefix'][0]
+    else:
+        prefix = 'sw'
+
+    if pathinfo == '/exists':
+        if cid == '':
+            return bad_request(start_response, ip, cn, 'exists with no cid')
+        if 'hostrepo' in conf:
+            for hostrepo in conf['hostrepo']:
+                repo = hostrepo[hostrepo.find(':')+1:]
+                if os.path.exists('/cvmfs2/' + repo + '/' + prefix + '/' + cid):
+                    logmsg(ip, cn, 'present in ' + repo + ': ' + cid)
+                    return good_request(start_response, 'PRESENT\n')
+        logmsg(ip, cn, 'missing: ' + cid)
+        return good_request(start_response, 'MISSING\n')
+
+    logmsg(ip, cn, 'Unrecognized api ' + pathinfo)
+    return error_request(start_response, '404 Not found', 'Unrecognized api')
