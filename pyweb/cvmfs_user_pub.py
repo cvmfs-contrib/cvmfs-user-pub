@@ -5,7 +5,7 @@
 #               published in any repository or is queued for publish
 #               on this server, otherwise MISSING
 #     publish : queues tarball in POSTed body for publication and
-#               returns OK
+#               returns OK.
 # cid is the Code IDentifier, expected to be a secure hash of the tarball
 #  but can be anything that is unique per tarball.
 
@@ -15,6 +15,7 @@ import urlparse, urllib
 confcachetime = 300  # 5 minutes
 userpubconffile = '/etc/cvmfs-user-pub.conf'
 alloweddnsfile = '/etc/grid-security/grid-mapfile'
+queuedir = '/tmp/cvmfs-user-pub'
 conf = {}
 alloweddns = set()
 confupdatetime = 0
@@ -65,6 +66,10 @@ def parse_conf():
                 newconf[words[0]].append(words[1])
             else:
                 newconf[words[0]] = [words[1]]
+
+        if 'queuedir' in newconf:
+            queuedir = newconf['queuedir'][0]
+
     except Exception, e:
         logmsg('-', '-', 'error reading ' + userpubconffile + ', continuing: ' + str(e))
         userpubconfmodtime = savemodtime
@@ -148,7 +153,9 @@ def dispatch(environ, start_response):
     if 'QUERY_STRING' in environ:
         parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
         if 'cid' in parameters:
-            cid = parameters['cid'][0]
+            cid = os.path.normpath(parameters['cid'][0])
+            if cid[0] == '.':
+              return bad_request(start_response, ip, cn, 'cid may not start with "."')
 
     if 'prefix' in conf:
         prefix = conf['prefix'][0]
@@ -166,6 +173,33 @@ def dispatch(environ, start_response):
                     return good_request(start_response, 'PRESENT\n')
         logmsg(ip, cn, 'missing: ' + cid)
         return good_request(start_response, 'MISSING\n')
+
+    if pathinfo == '/publish':
+        if cid == '':
+            return bad_request(start_response, ip, cn, 'pathinfo with no cid')
+        if not os.path.exists(queuedir):
+            os.mkdir(queuedir)
+        ciddir = os.path.join(queuedir,os.path.dirname(cid))
+        try:
+            if not os.path.exists(ciddir):
+                os.mkdir(ciddir)
+            cidpath = os.path.join(queuedir,cid)
+            contentlength = environ.get('CONTENT_LENGTH','0')
+            length = int(contentlength)
+            input = environ['wsgi.input']
+            with open(cidpath, 'w') as output:
+                while length > 0:
+                    bufsize = 16384
+                    if bufsize > length:
+                        bufsize = length
+                    buf = input.read(bufsize)
+                    output.write(buf)
+                    length -= len(buf)
+            logmsg(ip, cn, 'wrote ' + contentlength + ' bytes to ' + cidpath)
+        except Exception, e:
+            logmsg(ip, cn, 'error getting publish data: ' + str(e))
+            return bad_request(start_response, ip, cn, 'error getting publish data')
+        return good_request(start_response, 'OK\n')
 
     logmsg(ip, cn, 'Unrecognized api ' + pathinfo)
     return error_request(start_response, '404 Not found', 'Unrecognized api')
