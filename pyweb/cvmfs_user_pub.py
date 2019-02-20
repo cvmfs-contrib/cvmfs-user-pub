@@ -10,6 +10,7 @@
 #  but can be anything that is unique per tarball.
 
 import os, threading, time
+import Queue, socket
 import urlparse, urllib
 
 confcachetime = 300  # 5 minutes
@@ -22,9 +23,13 @@ confupdatetime = 0
 userpubconfmodtime = 0
 alloweddnsmodtime = 0
 conflock = threading.Lock()
+pubqueue = Queue.Queue()
 
 def logmsg(ip, id, msg):
     print '(' + ip + ' ' + id + ') '+ msg
+
+def threadmsg(msg):
+    print '(' + threading.current_thread().name + ') '+ msg
 
 def error_request(start_response, response_code, response_body):
     response_body = response_body + '\n'
@@ -101,6 +106,13 @@ def parse_alloweddns():
 
     return newdns
 
+# wait for a file to publish in the pubqueue, and publish it
+def publishloop(repo):
+    threadmsg('thread started for publishing to /cvmfs/' + repo)
+    while True:
+        path = pubqueue.get()
+        threadmsg('Publishing ' + path)
+
 def dispatch(environ, start_response):
     if 'REMOTE_ADDR' not in environ:
         logmsg('-', '-', 'No REMOTE_ADDR')
@@ -117,6 +129,26 @@ def dispatch(environ, start_response):
         conflock.release()
         newconf = parse_conf()
         newdns = parse_alloweddns()
+
+        if 'hostrepo' in newconf:
+            myhost = socket.gethostname().split('.')[0]
+            for hostrepo in newconf['hostrepo']:
+                colon = hostrepo.find(':')
+                if hostrepo[0:colon] != myhost:
+                    continue
+                repo = hostrepo[colon+1:]
+                pubrepo = 'Pub-' + repo
+                gotit = False
+                for thread in threading.enumerate():
+                    if thread.name == pubrepo:
+                        gotit = True
+                        break
+                if not gotit:
+                    thread = threading.Thread(name=pubrepo,
+                                              target=publishloop,
+                                              args=[repo])
+                    thread.start()
+
         conflock.acquire()
         userpubconf = newconf
         alloweddns = newdns
@@ -196,6 +228,7 @@ def dispatch(environ, start_response):
                     output.write(buf)
                     length -= len(buf)
             logmsg(ip, cn, 'wrote ' + contentlength + ' bytes to ' + cidpath)
+            pubqueue.put(cidpath)
         except Exception, e:
             logmsg(ip, cn, 'error getting publish data: ' + str(e))
             return bad_request(start_response, ip, cn, 'error getting publish data')
