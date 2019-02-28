@@ -10,7 +10,7 @@
 #  but can be anything that is unique per tarball.
 
 import os, threading, time
-import Queue, socket
+import Queue, socket, subprocess, select
 import urlparse, urllib
 
 confcachetime = 300  # 5 minutes
@@ -72,9 +72,6 @@ def parse_conf():
             else:
                 newconf[words[0]] = [words[1]]
 
-        if 'queuedir' in newconf:
-            queuedir = newconf['queuedir'][0]
-
     except Exception, e:
         logmsg('-', '-', 'error reading ' + userpubconffile + ', continuing: ' + str(e))
         userpubconfmodtime = savemodtime
@@ -110,8 +107,30 @@ def parse_alloweddns():
 def publishloop(repo):
     threadmsg('thread started for publishing to /cvmfs/' + repo)
     while True:
-        path = pubqueue.get()
-        threadmsg('Publishing ' + path)
+        cid = pubqueue.get()
+        p = subprocess.Popen(
+                  ('/usr/libexec/cvmfs-user-pub/publish', repo, queuedir, cid), 
+                  bufsize=1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # the following logic is from
+        #  https://stackoverflow.com/questions/23677526/checking-to-see-if-there-is-more-data-to-read-from-a-file-descriptor-using-pytho
+        while True:
+            ready, _, _ = select.select((p.stdout, p.stderr), (), ())
+            for fd in (p.stdout, p.stderr):
+                if fd in ready:
+                    line = fd.readline()
+                    if line:
+                        threadmsg(line)
+                    elif p.returncode is not None:
+                        ready = filter(lambda x: x is not fd, ready)
+            if p.poll() is not None and not ready:
+                break
+
+        if p.returncode != 0:
+            threadmsg('Publish ' + cid + ' failed with code ' + str(p.returncode))
+        cidpath = os.path.join(queuedir,cid)
+        threadmsg('Removing ' + cidpath)
+        os.remove(cidpath)
 
 def dispatch(environ, start_response):
     if 'REMOTE_ADDR' not in environ:
@@ -123,12 +142,17 @@ def dispatch(environ, start_response):
     global userpubconf
     global alloweddns
     global confupdatetime
+    global queuedir
     conflock.acquire()
     if (now - confupdatetime) > confcachetime:
         confupdatetime = now
         conflock.release()
         newconf = parse_conf()
         newdns = parse_alloweddns()
+
+        # things to do when config file has changed
+        if 'queuedir' in newconf:
+            queuedir = newconf['queuedir'][0]
 
         if 'hostrepo' in newconf:
             myhost = socket.gethostname().split('.')[0]
@@ -228,7 +252,7 @@ def dispatch(environ, start_response):
                     output.write(buf)
                     length -= len(buf)
             logmsg(ip, cn, 'wrote ' + contentlength + ' bytes to ' + cidpath)
-            pubqueue.put(cidpath)
+            pubqueue.put(cid)
         except Exception, e:
             logmsg(ip, cn, 'error getting publish data: ' + str(e))
             return bad_request(start_response, ip, cn, 'error getting publish data')
