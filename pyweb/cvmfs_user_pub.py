@@ -4,8 +4,11 @@
 #     exists :  returns in the body PRESENT if cid xxxxx is already
 #               published in any repository or is queued for publish
 #               on this server, otherwise MISSING
-#     publish : queues tarball in POSTed body for publication and
-#               returns OK.
+#     publish : queues tarball in POSTed body for publication in cid
+#               xxxxx.  If already present, returns PRESENT skips
+#               publish, otherwise returns OK and publishing will
+#               happen as soon as possible.
+#               
 # cid is the Code IDentifier, expected to be a secure hash of the tarball
 #  but can be anything that is unique per tarball.
 
@@ -17,6 +20,7 @@ confcachetime = 300  # 5 minutes
 userpubconffile = '/etc/cvmfs-user-pub.conf'
 alloweddnsfile = '/etc/grid-security/grid-mapfile'
 queuedir = '/tmp/cvmfs-user-pub'
+prefix = 'sw'
 conf = {}
 alloweddns = set()
 confupdatetime = 0
@@ -109,8 +113,8 @@ def publishloop(repo):
     while True:
         cid = pubqueue.get()
         p = subprocess.Popen(
-                  ('/usr/libexec/cvmfs-user-pub/publish', repo, queuedir, cid), 
-                  bufsize=1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          ('/usr/libexec/cvmfs-user-pub/publish', repo, queuedir, prefix, cid), 
+          bufsize=1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # the following logic is from
         #  https://stackoverflow.com/questions/23677526/checking-to-see-if-there-is-more-data-to-read-from-a-file-descriptor-using-pytho
@@ -127,10 +131,18 @@ def publishloop(repo):
                 break
 
         if p.returncode != 0:
-            threadmsg('Publish ' + cid + ' failed with code ' + str(p.returncode))
+            threadmsg('publish ' + cid + ' failed with code ' + str(p.returncode))
         cidpath = os.path.join(queuedir,cid)
-        threadmsg('Removing ' + cidpath)
+        threadmsg('removing ' + cidpath)
         os.remove(cidpath)
+
+def cidinrepo(cid, conf):
+    if 'hostrepo' in conf:
+        for hostrepo in conf['hostrepo']:
+            repo = hostrepo[hostrepo.find(':')+1:]
+            if os.path.exists('/cvmfs2/' + repo + '/' + prefix + '/' + cid):
+                return repo
+    return None
 
 def dispatch(environ, start_response):
     if 'REMOTE_ADDR' not in environ:
@@ -143,6 +155,7 @@ def dispatch(environ, start_response):
     global alloweddns
     global confupdatetime
     global queuedir
+    global prefix
     conflock.acquire()
     if (now - confupdatetime) > confcachetime:
         confupdatetime = now
@@ -153,6 +166,9 @@ def dispatch(environ, start_response):
         # things to do when config file has changed
         if 'queuedir' in newconf:
             queuedir = newconf['queuedir'][0]
+
+        if 'prefix' in newconf:
+            prefix = newconf['prefix'][0]
 
         if 'hostrepo' in newconf:
             myhost = socket.gethostname().split('.')[0]
@@ -213,20 +229,13 @@ def dispatch(environ, start_response):
             if cid[0] == '.':
               return bad_request(start_response, ip, cn, 'cid may not start with "."')
 
-    if 'prefix' in conf:
-        prefix = conf['prefix'][0]
-    else:
-        prefix = 'sw'
-
     if pathinfo == '/exists':
         if cid == '':
             return bad_request(start_response, ip, cn, 'exists with no cid')
-        if 'hostrepo' in conf:
-            for hostrepo in conf['hostrepo']:
-                repo = hostrepo[hostrepo.find(':')+1:]
-                if os.path.exists('/cvmfs2/' + repo + '/' + prefix + '/' + cid):
-                    logmsg(ip, cn, 'present in ' + repo + ': ' + cid)
-                    return good_request(start_response, 'PRESENT\n')
+        inrepo = cidinrepo(cid, conf)
+        if inrepo is not None:
+            logmsg(ip, cn, 'present in ' + inrepo + ': ' + cid)
+            return good_request(start_response, 'PRESENT\n')
         logmsg(ip, cn, 'missing: ' + cid)
         return good_request(start_response, 'MISSING\n')
 
@@ -252,6 +261,12 @@ def dispatch(environ, start_response):
                     output.write(buf)
                     length -= len(buf)
             logmsg(ip, cn, 'wrote ' + contentlength + ' bytes to ' + cidpath)
+            inrepo = cidinrepo(cid, conf)
+            if inrepo is not None:
+                logmsg(ip, cn, cid + ' already present in ' + inrepo)
+                logmsg(ip, cn, 'removing ' + cidpath)
+                os.remove(cidpath)
+                return good_request(start_response, 'PRESENT\n')
             pubqueue.put(cid)
         except Exception, e:
             logmsg(ip, cn, 'error getting publish data: ' + str(e))
