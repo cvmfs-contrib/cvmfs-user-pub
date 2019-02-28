@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 0.2
+Version: 0.3
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -63,8 +63,11 @@ systemctl daemon-reload
 
 
 %changelog
+* Thu Dec 28 2018 Dave Dykstra <dwd@fnal.gov> 0.3-1
+- Added PRESENT response to publish and pass prefix to publish script
+
 * Thu Dec 28 2018 Dave Dykstra <dwd@fnal.gov> 0.2-1
-* Added publish API
+- Added publish API
 
 * Thu Dec 20 2018 Dave Dykstra <dwd@fnal.gov> 0.1-1
 - Initial version
