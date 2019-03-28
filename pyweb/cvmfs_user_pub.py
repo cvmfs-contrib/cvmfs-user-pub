@@ -113,11 +113,12 @@ def publishloop(repo):
     while True:
         cid = pubqueue.get()
         threadmsg('publishing to /cvmfs/' + repo + '/' + prefix + '/' + cid)
-        cmd = 'zcat "' + queuedir + '/' + cid + '" | ' + \
-            'cvmfs_server ingest -t - ' + \
-                                '-b "' + prefix + '/' + cid + '" "' + repo + '"'
+        # enclose cid in single quotes because it comes from the user
+        cmd = "zcat " + queuedir + "/'" + cid + "' | " + \
+            "cvmfs_server ingest -t - " + \
+                                "-b " + prefix + "/'" + cid + "' " + repo
         threadmsg(cmd)
-        p = subprocess.Popen( ('/bin/sh', '-c', cmd), bufsize=1, 
+        p = subprocess.Popen( ('/bin/bash', '-c', cmd), bufsize=1, 
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # the following logic is from
@@ -233,7 +234,10 @@ def dispatch(environ, start_response):
         if 'cid' in parameters:
             cid = os.path.normpath(parameters['cid'][0])
             if cid[0] == '.':
-              return bad_request(start_response, ip, cn, 'cid may not start with "."')
+                return bad_request(start_response, ip, cn, 'cid may not start with "."')
+            if ("'" in cid) or ('\\' in cid):
+                # these are special to bash inside of single quotes
+                return bad_request(start_response, ip, cn, 'disallowed character in cid')
 
     if pathinfo == '/exists':
         if cid == '':
