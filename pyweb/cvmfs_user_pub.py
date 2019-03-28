@@ -112,9 +112,13 @@ def publishloop(repo):
     threadmsg('thread started for publishing to /cvmfs/' + repo)
     while True:
         cid = pubqueue.get()
-        p = subprocess.Popen(
-          ('/usr/libexec/cvmfs-user-pub/publish', repo, queuedir, prefix, cid), 
-          bufsize=1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        threadmsg('publishing to /cvmfs/' + repo + '/' + prefix + '/' + cid)
+        cmd = 'zcat "' + queuedir + '/' + cid + '" | ' + \
+            'cvmfs_server ingest -t - ' + \
+                                '-b "' + prefix + '/' + cid + '" "' + repo + '"'
+        threadmsg(cmd)
+        p = subprocess.Popen( ('/bin/sh', '-c', cmd), bufsize=1, 
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # the following logic is from
         #  https://stackoverflow.com/questions/23677526/checking-to-see-if-there-is-more-data-to-read-from-a-file-descriptor-using-pytho
@@ -132,6 +136,8 @@ def publishloop(repo):
 
         if p.returncode != 0:
             threadmsg('publish ' + cid + ' failed with code ' + str(p.returncode))
+        else:
+            threadmsg('publish of ' + cid + ' succeeded')
         cidpath = os.path.join(queuedir,cid)
         threadmsg('removing ' + cidpath)
         os.remove(cidpath)

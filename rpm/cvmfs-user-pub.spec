@@ -11,7 +11,7 @@ Source0: https://github.com/DrDaveD/%{name}/releases/download/%{version}/%{name}
 Requires: httpd
 Requires: mod_wsgi
 Requires: mod_ssl
-Requires: cvmfs-server
+Requires: cvmfs-server >= 2.6.0
 
 %description
 Accepts tarballs from authenticated users and publishes them in a
@@ -29,8 +29,6 @@ mkdir -p $RPM_BUILD_ROOT/var/www/wsgi-scripts/%{name}
 install -p -m 555 misc/dispatch.wsgi $RPM_BUILD_ROOT/var/www/wsgi-scripts/%{name}
 mkdir -p $RPM_BUILD_ROOT/usr/share/%{name}/pyweb
 install -p -m 444 pyweb/* $RPM_BUILD_ROOT/usr/share/%{name}/pyweb
-mkdir -p $RPM_BUILD_ROOT/usr/libexec/%{name}
-install -p -m 555 libexec/publish $RPM_BUILD_ROOT/usr/libexec/%{name}/publish
 
 %post
 if ! getent group cvmfspub >/dev/null 2>&1 ; then
@@ -58,7 +56,6 @@ systemctl daemon-reload
 /etc/httpd/conf.d/*
 /var/www/wsgi-scripts/%{name}
 /usr/share/%{name}
-/usr/libexec/%{name}
 /etc/systemd/system/httpd.service.d
 
 
