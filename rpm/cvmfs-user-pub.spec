@@ -22,6 +22,7 @@ cvmfs repository.
 
 %install
 mkdir -p $RPM_BUILD_ROOT/etc/httpd/conf.d
+install -p -m 644 etc/%{name}.conf $RPM_BUILD_ROOT/etc/%{name}.conf
 install -p -m 444 misc/%{name}.conf $RPM_BUILD_ROOT/etc/httpd/conf.d/10-%{name}.conf
 mkdir -p $RPM_BUILD_ROOT/etc/systemd/system/httpd.service.d
 install -p -m 444 misc/systemd-httpd.conf $RPM_BUILD_ROOT/etc/systemd/system/httpd.service.d/%{name}.conf
@@ -53,6 +54,7 @@ systemctl daemon-reload
 ! /sbin/service httpd status >/dev/null || /sbin/service httpd reload
 
 %files
+%config(noreplace) /etc/%{name}.conf
 /etc/httpd/conf.d/*
 /var/www/wsgi-scripts/%{name}
 /usr/share/%{name}
@@ -60,10 +62,10 @@ systemctl daemon-reload
 
 
 %changelog
-* Thu Dec 28 2018 Dave Dykstra <dwd@fnal.gov> 0.3-1
+* Fri Dec 28 2018 Dave Dykstra <dwd@fnal.gov> 0.3-1
 - Added PRESENT response to publish and pass prefix to publish script
 
-* Thu Dec 28 2018 Dave Dykstra <dwd@fnal.gov> 0.2-1
+* Fri Dec 28 2018 Dave Dykstra <dwd@fnal.gov> 0.2-1
 - Added publish API
 
 * Thu Dec 20 2018 Dave Dykstra <dwd@fnal.gov> 0.1-1
