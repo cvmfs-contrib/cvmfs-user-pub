@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 0.3
+Version: 0.4
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -62,10 +62,16 @@ systemctl daemon-reload
 
 
 %changelog
-* Fri Dec 28 2018 Dave Dykstra <dwd@fnal.gov> 0.3-1
+* Wed Apr 10 2019 Dave Dykstra <dwd@fnal.gov> 0.4-1
+- Use cvmfs-server 2.6.0 tarball ingestion
+- Add running cvmfs-server garbage collection
+
+* Thu Feb 28 2019 Dave Dykstra <dwd@fnal.gov> 0.3-1
 - Added PRESENT response to publish and pass prefix to publish script
 
-* Fri Dec 28 2018 Dave Dykstra <dwd@fnal.gov> 0.2-1
+* Thu Feb 28 2019 Dave Dykstra <dwd@fnal.gov> 0.2-1
+- Switched to nobody user and group
+- Added reading from /etc/cvmfs-user-pub.conf
 - Added publish API
 
 * Thu Dec 20 2018 Dave Dykstra <dwd@fnal.gov> 0.1-1
