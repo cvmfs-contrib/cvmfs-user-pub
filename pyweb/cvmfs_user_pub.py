@@ -12,7 +12,7 @@
 # cid is the Code IDentifier, expected to be a secure hash of the tarball
 #  but can be anything that is unique per tarball.
 
-import os, threading, time
+import os, threading, time, datetime
 import Queue, socket, subprocess, select
 import urlparse, urllib
 
@@ -21,6 +21,7 @@ userpubconffile = '/etc/cvmfs-user-pub.conf'
 alloweddnsfile = '/etc/grid-security/grid-mapfile'
 queuedir = '/tmp/cvmfs-user-pub'
 prefix = 'sw'
+gcstarthour = 3
 conf = {}
 alloweddns = set()
 confupdatetime = 0
@@ -107,41 +108,63 @@ def parse_alloweddns():
 
     return newdns
 
-# wait for a file to publish in the pubqueue, and publish it
-def publishloop(repo):
-    threadmsg('thread started for publishing to /cvmfs/' + repo)
+def runthreadcmd(cmd, msg):
+    threadmsg(cmd)
+    p = subprocess.Popen( ('/bin/bash', '-c', cmd), bufsize=1, 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # the following logic is from
+    #  https://stackoverflow.com/questions/23677526/checking-to-see-if-there-is-more-data-to-read-from-a-file-descriptor-using-pytho
     while True:
-        cid = pubqueue.get()
-        threadmsg('publishing to /cvmfs/' + repo + '/' + prefix + '/' + cid)
-        # enclose cid in single quotes because it comes from the user
-        cmd = "zcat " + queuedir + "/'" + cid + "' | " + \
-            "cvmfs_server ingest -t - " + \
-                                "-b " + prefix + "/'" + cid + "' " + repo
-        threadmsg(cmd)
-        p = subprocess.Popen( ('/bin/bash', '-c', cmd), bufsize=1, 
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        ready, _, _ = select.select((p.stdout, p.stderr), (), ())
+        for fd in (p.stdout, p.stderr):
+            if fd in ready:
+                line = fd.readline()
+                if line:
+                    threadmsg(line)
+                elif p.returncode is not None:
+                    ready = filter(lambda x: x is not fd, ready)
+        if p.poll() is not None and not ready:
+            break
 
-        # the following logic is from
-        #  https://stackoverflow.com/questions/23677526/checking-to-see-if-there-is-more-data-to-read-from-a-file-descriptor-using-pytho
-        while True:
-            ready, _, _ = select.select((p.stdout, p.stderr), (), ())
-            for fd in (p.stdout, p.stderr):
-                if fd in ready:
-                    line = fd.readline()
-                    if line:
-                        threadmsg(line)
-                    elif p.returncode is not None:
-                        ready = filter(lambda x: x is not fd, ready)
-            if p.poll() is not None and not ready:
-                break
+    if p.returncode != 0:
+        threadmsg(msg + ' failed with code ' + str(p.returncode))
+    else:
+        threadmsg(msg + ' succeeded')
+    return
 
-        if p.returncode != 0:
-            threadmsg('publish ' + cid + ' failed with code ' + str(p.returncode))
+# do the operations on a cvmfs repository
+def publishloop(repo, reponum):
+    threadmsg('thread ' + str(reponum) + ' started for publishing to /cvmfs/' + repo)
+    gcdone = False
+    while True:
+        cid = None
+        try:
+            cid = pubqueue.get(True, 60)
+        except Queue.Empty, e:
+            # cid will be None in this case
+            pass
+
+        if cid is not None:
+            threadmsg('publishing to /cvmfs/' + repo + '/' + prefix + '/' + cid)
+            # enclose cid in single quotes because it comes from the user
+            cmd = "zcat " + queuedir + "/'" + cid + "' | " + \
+                "cvmfs_server ingest -t - " + \
+                                    "-b " + prefix + "/'" + cid + "' " + repo
+            returncode = runthreadcmd(cmd, 'publish ' + cid)
+            cidpath = os.path.join(queuedir,cid)
+            threadmsg('removing ' + cidpath)
+            os.remove(cidpath)
+
+        thishour = datetime.datetime.now().hour
+        if thishour == (gcstarthour + reponum) % 24:
+            if not gcdone:
+                threadmsg('running gc on ' + repo)
+                cmd = "cvmfs_server gc -f '" + repo + "'"
+                returncode = runthreadcmd(cmd, 'gc ' + repo)
+                gcdone = True
         else:
-            threadmsg('publish of ' + cid + ' succeeded')
-        cidpath = os.path.join(queuedir,cid)
-        threadmsg('removing ' + cidpath)
-        os.remove(cidpath)
+            gcdone = False
 
 def cidinrepo(cid, conf):
     if 'hostrepo' in conf:
@@ -163,6 +186,7 @@ def dispatch(environ, start_response):
     global confupdatetime
     global queuedir
     global prefix
+    global gcstarthour
     conflock.acquire()
     if (now - confupdatetime) > confcachetime:
         confupdatetime = now
@@ -177,8 +201,12 @@ def dispatch(environ, start_response):
         if 'prefix' in newconf:
             prefix = newconf['prefix'][0]
 
+        if 'gcstarthour' in newconf:
+            gcstarthour = int(newconf['gcstarthour'][0])
+
         if 'hostrepo' in newconf:
             myhost = socket.gethostname().split('.')[0]
+            reponum = 0
             for hostrepo in newconf['hostrepo']:
                 colon = hostrepo.find(':')
                 if hostrepo[0:colon] != myhost:
@@ -193,8 +221,9 @@ def dispatch(environ, start_response):
                 if not gotit:
                     thread = threading.Thread(name=pubrepo,
                                               target=publishloop,
-                                              args=[repo])
+                                              args=[repo, reponum])
                     thread.start()
+                reponum += 1
 
         conflock.acquire()
         userpubconf = newconf
@@ -202,6 +231,14 @@ def dispatch(environ, start_response):
     conf = userpubconf
     dns = alloweddns
     conflock.release()
+
+    if 'PATH_INFO' not in environ:
+        return bad_request(start_response, ip, cn, 'No PATH_INFO')
+    pathinfo = environ['PATH_INFO']
+
+    parameters = {}
+    if 'QUERY_STRING' in environ:
+        parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
 
     if 'SSL_CLIENT_S_DN' not in environ:
         logmsg(ip, '-', 'No client cert, access denied')
@@ -224,20 +261,14 @@ def dispatch(environ, start_response):
     if endidx >= 0:
         cn = cn[0:endidx]
 
-    if 'PATH_INFO' not in environ:
-        return bad_request(start_response, ip, cn, 'No PATH_INFO')
-    pathinfo = environ['PATH_INFO']
-
     cid = ''
-    if 'QUERY_STRING' in environ:
-        parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
-        if 'cid' in parameters:
-            cid = os.path.normpath(parameters['cid'][0])
-            if cid[0] == '.':
-                return bad_request(start_response, ip, cn, 'cid may not start with "."')
-            if ("'" in cid) or ('\\' in cid):
-                # these are special to bash inside of single quotes
-                return bad_request(start_response, ip, cn, 'disallowed character in cid')
+    if 'cid' in parameters:
+        cid = os.path.normpath(parameters['cid'][0])
+        if cid[0] == '.':
+            return bad_request(start_response, ip, cn, 'cid may not start with "."')
+        if ("'" in cid) or ('\\' in cid):
+            # these are special to bash inside of single quotes
+            return bad_request(start_response, ip, cn, 'disallowed character in cid')
 
     if pathinfo == '/exists':
         if cid == '':
