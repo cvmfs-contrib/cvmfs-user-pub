@@ -15,6 +15,7 @@
 import os, threading, time, datetime
 import Queue, socket, subprocess, select
 import urlparse, urllib
+import shutil
 
 confcachetime = 300  # 5 minutes
 userpubconffile = '/etc/cvmfs-user-pub.conf'
@@ -29,6 +30,8 @@ userpubconfmodtime = 0
 alloweddnsmodtime = 0
 conflock = threading.Lock()
 pubqueue = Queue.Queue()
+deletelock = threading.Lock()
+deletes = {}
 
 def logmsg(ip, id, msg):
     print '(' + ip + ' ' + id + ') '+ msg
@@ -131,7 +134,7 @@ def runthreadcmd(cmd, msg):
         threadmsg(msg + ' failed with code ' + str(p.returncode))
     else:
         threadmsg(msg + ' succeeded')
-    return
+    return p.returncode
 
 # do the operations on a cvmfs repository
 def publishloop(repo, reponum):
@@ -156,12 +159,30 @@ def publishloop(repo, reponum):
             threadmsg('removing ' + cidpath)
             os.remove(cidpath)
 
+        deletelock.acquire()
+        if repo in deletes:
+            deletelist = deletes[repo]
+            del deletes[repo]
+            deletelock.release()
+            threadmsg('starting transaction for deletes in ' + repo)
+            cmd = "cvmfs_server transaction '" + repo + "'"
+            if runthreadcmd(cmd, 'start transaction ' + repo) == 0:
+                for deletedir in deletelist:
+                    dir = '/cvmfs/' + repo + '/' + prefix + '/' + deletedir
+                    threadmsg('removing ' + dir)
+                    shutil.rmtree(dir)
+                threadmsg('publishing deletes in ' + repo)
+                cmd = "cvmfs_server publish '" + repo + "'"
+                runthreadcmd(cmd, 'publishing deletes ' + repo)
+        else:
+            deletelock.release()
+
         thishour = datetime.datetime.now().hour
         if thishour == (gcstarthour + reponum) % 24:
             if not gcdone:
                 threadmsg('running gc on ' + repo)
                 cmd = "cvmfs_server gc -f '" + repo + "'"
-                returncode = runthreadcmd(cmd, 'gc ' + repo)
+                runthreadcmd(cmd, 'gc ' + repo)
                 gcdone = True
         else:
             gcdone = False
@@ -239,6 +260,22 @@ def dispatch(environ, start_response):
     parameters = {}
     if 'QUERY_STRING' in environ:
         parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
+
+    if pathinfo == '/delete':
+        if ip != '127.0.0.1':
+            return bad_request(start_response, ip, '-', 'Delete may only be run from localhost')
+        if 'cid' not in parameters:
+            return bad_request(start_response, ip, '-', 'no cid')
+        cid = parameters['cid'][0]
+        inrepo = cidinrepo(cid, conf)
+        if inrepo is None:
+            return bad_request(start_response, ip, '-', 'cid not found')
+        deletelock.acquire()
+        if inrepo not in deletes:
+            deletes[inrepo] = []
+        deletes[inrepo].append(cid)
+        deletelock.release()
+        return good_request(start_response, 'OK\n')
 
     if 'SSL_CLIENT_S_DN' not in environ:
         logmsg(ip, '-', 'No client cert, access denied')
