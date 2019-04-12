@@ -149,11 +149,9 @@ def publishloop(repo, reponum):
             pass
 
         if cid is not None:
-            threadmsg('publishing to /cvmfs/' + repo + '/' + prefix + '/' + cid)
             # enclose cid in single quotes because it comes from the user
-            cmd = "zcat " + queuedir + "/'" + cid + "' | " + \
-                "cvmfs_server ingest -t - " + \
-                                    "-b " + prefix + "/'" + cid + "' " + repo
+            cmd = "/usr/libexec/cvmfs-user-pub/publish " + repo + " " + \
+                    queuedir + " " + prefix + " '" + cid + "'"
             returncode = runthreadcmd(cmd, 'publish ' + cid)
             cidpath = os.path.join(queuedir,cid)
             threadmsg('removing ' + cidpath)

@@ -1,0 +1,24 @@
+#!/bin/bash
+
+REPO="$1"
+QUEUEDIR="$2"
+PREFIX="$3"
+CID="$4"
+set -e
+echo "starting transaction for publish in $REPO"
+if ! cvmfs_server transaction $REPO; then
+    echo "transaction start failed, trying abort and transaction again"
+    cvmfs_server abort -f $REPO
+    cvmfs_server transaction $REPO
+fi
+SUBPATH="/cvmfs/$REPO/$PREFIX/$CID"
+echo "Extracting into $SUBPATH"
+mkdir -p "$SUBPATH"
+if tar -C "$SUBPATH" -xf "$QUEUEDIR/$CID"; then
+    echo "publishing $SUBPATH"
+    cvmfs_server publish $REPO
+else
+    echo "extraction failed, aborting"
+    cvmfs_server abort -f $REPO
+fi
+echo "done with $CID"
