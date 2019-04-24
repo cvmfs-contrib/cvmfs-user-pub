@@ -1,0 +1,49 @@
+#!/bin/bash
+
+if [ ! -f /etc/cvmfs-user-pub.conf ]; then
+    exit
+fi
+
+MYHOSTLONG="`hostname`"
+MYHOSTSHORT="`hostname -s`"
+for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
+    HOST="`echo $HOSTREPO|sed 's/:.*//'`"
+    REPO="`echo $HOSTREPO|sed 's/.*://'`"
+    if [ "$HOST" = "$MYHOSTLONG" ] || [ "$HOST" = "$MYHOSTSHORT" ]; then
+        if [ ! -d /srv/cvmfs/$REPO ]; then
+            if ! cvmfs_server mkfs -o cvmfspub -G '1 day ago' -z $REPO; then
+                continue
+            fi
+        fi
+        SERVERCONF=/etc/cvmfs/repositories.d/$REPO/server.conf
+        for OPT in  CVMFS_IGNORE_XDIR_HARDLINKS=true \
+                    CVMFS_GENERATE_LEGACY_BULK_CHUNKS=false \
+                    CVMFS_AUTOCATALOGS=true \
+                    CVMFS_ENFORCE_LIMITS=true \
+                    CVMFS_FORCE_REMOUNT_WARNING=false \
+                    CVMFS_AUTO_GC=false \
+                    CVMFS_REPOSITORY_TTL=15 \
+                    CVMFS_PRINT_STATISTICS=true \
+        ; do
+            if ! grep -q "^$OPT$" $SERVERCONF; then
+                echo "$OPT" >>$SERVERCONF
+            fi
+        done
+    elif [ ! -d /srv/cvmfs/$REPO ]; then
+        PUB=/etc/cvmfs/keys/$REPO.pub
+        if [ ! -f $PUB ]; then
+            DOMAIN="`echo $REPO|cut -d. -f2-`"
+            PUB=/etc/cvmfs/keys/$DOMAIN.pub
+            if [ ! -f $PUB ]; then
+                PUB=/etc/cvmfs/keys/$DOMAIN
+                if [ ! -d $PUB ]; then
+                    echo "No key found for $REPO"
+                    continue
+                fi
+            fi
+        fi
+        if ! cvmfs_server add-replica -o cvmfspub -z http://$HOST/cvmfs/$REPO $PUB; then
+            echo "Failed to replicate $REPO from $HOST with key $PUB"
+        fi
+    fi
+done

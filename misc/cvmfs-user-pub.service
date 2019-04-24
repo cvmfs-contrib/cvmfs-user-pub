@@ -1,0 +1,13 @@
+[Unit]
+Description=cvmfs-user-pub boot initialization 
+After=network.target remote-fs.target nss-lookup.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/etc/init.d/cvmfs-user-pub start
+ExecStop=/etc/init.d/cvmfs-user-pub stop
+# Haven't been able to get ExecReload to work properly, leave it out
+
+[Install]
+WantedBy=multi-user.target
