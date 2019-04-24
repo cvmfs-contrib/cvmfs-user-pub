@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# the if check should not be needed with cvmfs-server-2.6.1 and later
+if [ -n "`find /etc/cvmfs/repositories.d -name replica.conf 2>/dev/null|head -1`" ]; then
+    cvmfs_server snapshot -asin
+fi

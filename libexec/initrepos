@@ -44,6 +44,8 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
         fi
         if ! cvmfs_server add-replica -o cvmfspub -z http://$HOST/cvmfs/$REPO $PUB; then
             echo "Failed to replicate $REPO from $HOST with key $PUB"
+        elif ! cvmfs_server snapshot $REPO; then
+            echo "Failed to make initial snapshot of $REPO from $HOST"
         fi
     fi
 done

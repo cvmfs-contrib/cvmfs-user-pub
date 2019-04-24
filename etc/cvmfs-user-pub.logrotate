@@ -1,0 +1,5 @@
+/var/log/cvmfs/*.log {
+    weekly
+    missingok
+    notifempty
+}

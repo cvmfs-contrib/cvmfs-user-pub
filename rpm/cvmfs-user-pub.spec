@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 0.5
+Version: 0.6
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -21,10 +21,14 @@ cvmfs repository.
 %setup -q
 
 %install
+mkdir -p $RPM_BUILD_ROOT/etc/cron.d
 mkdir -p $RPM_BUILD_ROOT/etc/init.d
+mkdir -p $RPM_BUILD_ROOT/etc/logrotate.d
 mkdir -p $RPM_BUILD_ROOT/etc/httpd/conf.d
 install -p -m 644 etc/%{name}.conf $RPM_BUILD_ROOT/etc/%{name}.conf
+install -p -m 644 etc/%{name}.cron $RPM_BUILD_ROOT/etc/cron.d/%{name}
 install -p -m 755 etc/%{name}.init $RPM_BUILD_ROOT/etc/init.d/%{name}
+install -p -m 644 etc/%{name}.logrotate $RPM_BUILD_ROOT/etc/logrotate.d/%{name}
 install -p -m 444 misc/%{name}.conf $RPM_BUILD_ROOT/etc/httpd/conf.d/10-%{name}.conf
 mkdir -p $RPM_BUILD_ROOT/usr/lib/systemd/system/httpd.service.d
 install -p -m 444 misc/%{name}.service $RPM_BUILD_ROOT/usr/lib/systemd/system/%{name}.service
@@ -36,6 +40,7 @@ install -p -m 444 pyweb/* $RPM_BUILD_ROOT/usr/share/%{name}/pyweb
 mkdir -p $RPM_BUILD_ROOT/usr/libexec/%{name}
 install -p -m 555 libexec/initrepos $RPM_BUILD_ROOT/usr/libexec/%{name}/initrepos
 install -p -m 555 libexec/publish $RPM_BUILD_ROOT/usr/libexec/%{name}/publish
+install -p -m 555 libexec/snapshots $RPM_BUILD_ROOT/usr/libexec/%{name}/snapshots
 
 %post
 if ! getent group cvmfspub >/dev/null 2>&1 ; then
@@ -77,7 +82,9 @@ done
 
 %files
 %config(noreplace) /etc/%{name}.conf
+/etc/cron.d/*
 /etc/init.d/*
+/etc/logrotate.d/*
 /etc/httpd/conf.d/*
 /var/www/wsgi-scripts/%{name}
 /usr/share/%{name}
@@ -87,7 +94,8 @@ done
 
 
 %changelog
-# - Add automatic repository initialization from config file
+* Wed Apr 24 2019 Dave Dykstra <dwd@fnal.gov> 0.6-1
+- Add automatic repository initialization from config file
 
 * Fri Apr 12 2019 Dave Dykstra <dwd@fnal.gov> 0.5-1
 - Add delete API

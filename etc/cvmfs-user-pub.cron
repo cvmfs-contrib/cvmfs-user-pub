@@ -1,0 +1,2 @@
+* * * * * root /usr/libexec/cvmfs-user-pub/snapshots
+* * * * * root sleep 30; /usr/libexec/cvmfs-user-pub/snapshots
