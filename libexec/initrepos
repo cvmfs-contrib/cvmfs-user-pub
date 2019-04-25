@@ -4,8 +4,13 @@ if [ ! -f /etc/cvmfs-user-pub.conf ]; then
     exit
 fi
 
+PREFIX="`sed -n 's/^prefix\s*//p' /etc/cvmfs-user-pub.conf`"
+if [ -z "$PREFIX" ]; then
+    PREFIX=sw
+fi
 MYHOSTLONG="`hostname`"
 MYHOSTSHORT="`hostname -s`"
+ADDEDONE=false
 for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
     HOST="`echo $HOSTREPO|sed 's/:.*//'`"
     REPO="`echo $HOSTREPO|sed 's/.*://'`"
@@ -14,6 +19,7 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
             if ! cvmfs_server mkfs -o cvmfspub -G '1 day ago' -z $REPO; then
                 continue
             fi
+            ADDEDONE=true
         fi
         SERVERCONF=/etc/cvmfs/repositories.d/$REPO/server.conf
         for OPT in  CVMFS_IGNORE_XDIR_HARDLINKS=true \
@@ -29,6 +35,15 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
                 echo "$OPT" >>$SERVERCONF
             fi
         done
+        if [ ! -f /cvmfs/$REPO/.cvmfsdirtab ]; then
+            if ! cvmfs_server transaction $REPO; then
+                echo "Cannot start transaction, skipping making .cvmfsdirtab"
+            else
+                (echo "/$PREFIX/*"; echo "/$PREFIX/*/*") >/cvmfs/$REPO/.cvmfsdirtab
+                rm -f /cvmfs/$REPO/new_repository
+                cvmfs_server publish $REPO
+            fi
+        fi
     elif [ ! -d /srv/cvmfs/$REPO ]; then
         PUB=/etc/cvmfs/keys/$REPO.pub
         if [ ! -f $PUB ]; then
@@ -42,10 +57,16 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
                 fi
             fi
         fi
-        if ! cvmfs_server add-replica -o cvmfspub -z http://$HOST/cvmfs/$REPO $PUB; then
+        ADDEDONE=true
+        if ! cvmfs_server add-replica -o cvmfspub http://$HOST/cvmfs/$REPO $PUB; then
             echo "Failed to replicate $REPO from $HOST with key $PUB"
         elif ! cvmfs_server snapshot $REPO; then
             echo "Failed to make initial snapshot of $REPO from $HOST"
         fi
     fi
 done
+
+if $ADDEDONE; then
+    systemctl restart cvmfs-user-pub
+fi
+
