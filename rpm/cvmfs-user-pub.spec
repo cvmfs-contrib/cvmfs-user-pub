@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 0.6
+Version: 0.7
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -11,7 +11,9 @@ Source0: https://github.com/DrDaveD/%{name}/releases/download/%{version}/%{name}
 Requires: httpd
 Requires: mod_wsgi
 Requires: mod_ssl
-Requires: cvmfs-server
+# 2.5.1 is needed for the updated geoip DB for add-replica
+Requires: cvmfs-server >= 2.5.1
+Requires: cvmfs
 
 %description
 Accepts tarballs from authenticated users and publishes them in a
@@ -24,11 +26,13 @@ cvmfs repository.
 mkdir -p $RPM_BUILD_ROOT/etc/cron.d
 mkdir -p $RPM_BUILD_ROOT/etc/init.d
 mkdir -p $RPM_BUILD_ROOT/etc/logrotate.d
+mkdir -p $RPM_BUILD_ROOT/etc/cvmfs/default.d
 mkdir -p $RPM_BUILD_ROOT/etc/httpd/conf.d
 install -p -m 644 etc/%{name}.conf $RPM_BUILD_ROOT/etc/%{name}.conf
 install -p -m 644 etc/%{name}.cron $RPM_BUILD_ROOT/etc/cron.d/%{name}
 install -p -m 755 etc/%{name}.init $RPM_BUILD_ROOT/etc/init.d/%{name}
 install -p -m 644 etc/%{name}.logrotate $RPM_BUILD_ROOT/etc/logrotate.d/%{name}
+install -p -m 444 etc/%{name}.default $RPM_BUILD_ROOT/etc/cvmfs/default.d/99-%{name}.conf
 install -p -m 444 misc/%{name}.conf $RPM_BUILD_ROOT/etc/httpd/conf.d/10-%{name}.conf
 mkdir -p $RPM_BUILD_ROOT/usr/lib/systemd/system/httpd.service.d
 install -p -m 444 misc/%{name}.service $RPM_BUILD_ROOT/usr/lib/systemd/system/%{name}.service
@@ -61,30 +65,25 @@ if [ ! -d /home/cvmfspub ]; then
     chmod 755 /home/cvmfspub
 fi
 
-/usr/libexec/%{name}/initrepos
-
 systemctl daemon-reload
 
-for service in %{name} httpd; do
+for service in cvmfs-user-pub httpd; do
     if ! systemctl is-enabled --quiet $service; then
         systemctl enable $service
     fi
-    if systemctl is-active --quiet $service; then
-        if [ $service = %{name} ]; then
-            systemctl restart $service
-        else
-            systemctl reload $service
-        fi
-    else
+    if ! systemctl is-active --quiet $service; then
         systemctl start $service
     fi
 done
+
+/usr/libexec/%{name}/initrepos
 
 %files
 %config(noreplace) /etc/%{name}.conf
 /etc/cron.d/*
 /etc/init.d/*
 /etc/logrotate.d/*
+/etc/cvmfs/default.d/*
 /etc/httpd/conf.d/*
 /var/www/wsgi-scripts/%{name}
 /usr/share/%{name}
@@ -94,6 +93,16 @@ done
 
 
 %changelog
+* Thu Apr 25 2019 Dave Dykstra <dwd@fnal.gov> 0.7-1
+- Mount all /cvmfs2 repos from localhost
+- Create .cvmfsdirtab files in repos
+- Remove new_repository file from repos
+- Do the systemctl restart from inside initrepos instead of rpm %post
+- Don't enable auto garbage collection in replicas (will add code later
+  to do it from cron)
+- Require cvmfs-server-2.5.1
+- Disable options set in cvmfs-config-osg rpm in case it is present
+
 * Wed Apr 24 2019 Dave Dykstra <dwd@fnal.gov> 0.6-1
 - Add automatic repository initialization from config file
 
