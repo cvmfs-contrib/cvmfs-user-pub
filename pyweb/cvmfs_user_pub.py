@@ -176,7 +176,7 @@ def publishloop(repo, reponum):
             deletelock.release()
 
         thishour = datetime.datetime.now().hour
-        if thishour == (gcstarthour + reponum) % 24:
+        if thishour == (gcstarthour - 1 + reponum) % 24:
             if not gcdone:
                 threadmsg('running gc on ' + repo)
                 cmd = "cvmfs_server gc -f '" + repo + "'"
@@ -224,13 +224,16 @@ def dispatch(environ, start_response):
             gcstarthour = int(newconf['gcstarthour'][0])
 
         if 'hostrepo' in newconf:
-            myhost = socket.gethostname().split('.')[0]
+            myhost = socket.gethostname()
+            myshorthost = myhost.split('.')[0]
             reponum = 0
             for hostrepo in newconf['hostrepo']:
+                reponum += 1
                 colon = hostrepo.find(':')
-                if hostrepo[0:colon] != myhost:
-                    continue
+                host = hostrepo[0:colon]
                 repo = hostrepo[colon+1:]
+                if host != myhost and host != myshorthost:
+                    continue
                 pubrepo = 'Pub-' + repo
                 gotit = False
                 for thread in threading.enumerate():
@@ -242,7 +245,6 @@ def dispatch(environ, start_response):
                                               target=publishloop,
                                               args=[repo, reponum])
                     thread.start()
-                reponum += 1
 
         conflock.acquire()
         userpubconf = newconf
