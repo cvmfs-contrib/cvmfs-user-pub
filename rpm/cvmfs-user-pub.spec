@@ -42,6 +42,7 @@ install -p -m 555 misc/dispatch.wsgi $RPM_BUILD_ROOT/var/www/wsgi-scripts/%{name
 mkdir -p $RPM_BUILD_ROOT/usr/share/%{name}/pyweb
 install -p -m 444 pyweb/* $RPM_BUILD_ROOT/usr/share/%{name}/pyweb
 mkdir -p $RPM_BUILD_ROOT/usr/libexec/%{name}
+install -p -m 555 libexec/gcsnapshots $RPM_BUILD_ROOT/usr/libexec/%{name}/gcsnapshots
 install -p -m 555 libexec/initrepos $RPM_BUILD_ROOT/usr/libexec/%{name}/initrepos
 install -p -m 555 libexec/publish $RPM_BUILD_ROOT/usr/libexec/%{name}/publish
 install -p -m 555 libexec/snapshots $RPM_BUILD_ROOT/usr/libexec/%{name}/snapshots
@@ -73,6 +74,8 @@ for service in cvmfs-user-pub httpd; do
     fi
     if ! systemctl is-active --quiet $service; then
         systemctl start $service
+    elif [ $service = httpd ]; then
+        systemctl reload $service
     fi
 done
 
@@ -93,6 +96,10 @@ done
 
 
 %changelog
+#- support gc on snapshots
+#- make .cvmfsdirtab be owned by cvmfspub
+#- reload httpd again on rpm upgrade
+
 * Thu Apr 25 2019 Dave Dykstra <dwd@fnal.gov> 0.7-1
 - Mount all /cvmfs2 repos from localhost
 - Create .cvmfsdirtab files in repos
