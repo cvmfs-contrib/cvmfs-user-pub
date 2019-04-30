@@ -1,0 +1,28 @@
+#!/bin/bash
+
+if [ ! -f /etc/cvmfs-user-pub.conf ]; then
+    exit
+fi
+
+GCSTARTHOUR="`sed -n 's/^gcstarthour\s*//p' /etc/cvmfs-user-pub.conf`"
+if [ -z "$GCSTARTHOUR" ]; then
+    GCSTARTHOUR=3
+fi
+MYHOSTLONG="`hostname`"
+MYHOSTSHORT="`hostname -s`"
+REPONUM=0
+THISHOUR="`date +%H`"
+for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
+    let REPONUM+=1
+    if (( $THISHOUR != ($GCSTARTHOUR - 1 + $REPONUM) % 24 )); then
+        continue
+    fi
+    HOST="`echo $HOSTREPO|sed 's/:.*//'`"
+    REPO="`echo $HOSTREPO|sed 's/.*://'`"
+    if [ "$HOST" = "$MYHOSTLONG" ] || [ "$HOST" = "$MYHOSTSHORT" ]; then
+        continue
+    fi
+    echo "Starting gc of $REPO at `date`"
+    cvmfs_server gc -f $REPO
+    echo "Ended gc of $REPO at `date`"
+done
