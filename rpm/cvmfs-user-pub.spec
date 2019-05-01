@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 0.7
+Version: 0.8
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -96,9 +96,10 @@ done
 
 
 %changelog
-#- support gc on snapshots
-#- make .cvmfsdirtab be owned by cvmfspub
-#- reload httpd again on rpm upgrade
+* Wed May 01 2019 Dave Dykstra <dwd@fnal.gov> 0.8-1
+- support gc on snapshots
+- make .cvmfsdirtab be owned by cvmfspub
+- reload httpd again on rpm upgrade
 
 * Thu Apr 25 2019 Dave Dykstra <dwd@fnal.gov> 0.7-1
 - Mount all /cvmfs2 repos from localhost
