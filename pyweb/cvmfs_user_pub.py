@@ -143,15 +143,20 @@ def publishloop(repo, reponum):
     while True:
         cid = None
         try:
-            cid = pubqueue.get(True, 60)
+            cid, option = pubqueue.get(True, 60)
         except Queue.Empty, e:
             # cid will be None in this case
             pass
 
         if cid is not None:
+            pubdir = prefix
+            if option == 'ts':
+                # This particular directory name 'ts' (for timestamp)
+                #  tells the publish script to only touch the file
+                pubdir = 'ts'
             # enclose cid in single quotes because it comes from the user
             cmd = "/usr/libexec/cvmfs-user-pub/publish " + repo + " " + \
-                    queuedir + " " + prefix + " '" + cid + "'"
+                    queuedir + " " + pubdir + " '" + cid + "'"
             returncode = runthreadcmd(cmd, 'publish ' + cid)
             cidpath = os.path.join(queuedir,cid)
             threadmsg('removing ' + cidpath)
@@ -342,10 +347,9 @@ def dispatch(environ, start_response):
             inrepo = cidinrepo(cid, conf)
             if inrepo is not None:
                 logmsg(ip, cn, cid + ' already present in ' + inrepo)
-                logmsg(ip, cn, 'removing ' + cidpath)
-                os.remove(cidpath)
+                pubqueue.put([cid, 'ts'])
                 return good_request(start_response, 'PRESENT\n')
-            pubqueue.put(cid)
+            pubqueue.put([cid, ''])
         except Exception, e:
             logmsg(ip, cn, 'error getting publish data: ' + str(e))
             return bad_request(start_response, ip, cn, 'error getting publish data')

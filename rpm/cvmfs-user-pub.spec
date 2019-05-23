@@ -96,6 +96,9 @@ done
 
 
 %changelog
+
+#- make the publish api touch a timestamp file if cid already present
+
 * Wed May 01 2019 Dave Dykstra <dwd@fnal.gov> 0.8-1
 - support gc on snapshots
 - make .cvmfsdirtab be owned by cvmfspub

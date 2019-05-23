@@ -12,13 +12,19 @@ if ! cvmfs_server transaction $REPO; then
     cvmfs_server transaction $REPO
 fi
 SUBPATH="/cvmfs/$REPO/$PREFIX/$CID"
-echo "Extracting into $SUBPATH"
-mkdir -p "$SUBPATH"
-if tar -C "$SUBPATH" -xf "$QUEUEDIR/$CID"; then
-    echo "publishing $SUBPATH"
-    cvmfs_server publish $REPO
+if [ "$PREFIX" = "ts" ]; then
+    echo "touching $SUBPATH"
+    mkdir -p "${SUBPATH%/*}"
+    touch $SUBPATH
 else
-    echo "extraction failed, aborting"
-    cvmfs_server abort -f $REPO
+    echo "extracting into $SUBPATH"
+    mkdir -p "$SUBPATH"
+    if ! tar -C "$SUBPATH" -xf "$QUEUEDIR/$CID"; then
+        echo "extraction failed, aborting"
+        cvmfs_server abort -f $REPO
+        exit
+    fi
 fi
+echo "publishing $SUBPATH"
+cvmfs_server publish $REPO
 echo "done with $CID"
