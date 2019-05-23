@@ -283,25 +283,28 @@ def dispatch(environ, start_response):
         return good_request(start_response, 'OK\n')
 
     if 'SSL_CLIENT_S_DN' not in environ:
-        logmsg(ip, '-', 'No client cert, access denied')
-        return error_request(start_response, '403 Access denied', 'Client cert required')
-    dn = environ['SSL_CLIENT_S_DN']
-    if dn not in dns:
-        logmsg(ip, '-', 'DN unrecognized, access denied: ' + dn)
-        return error_request(start_response, '403 Access denied', 'Unrecognized DN')
-
-    cnidx = dn.find('/CN=')
-    if cnidx < 0:
-        logmsg(ip, '-', 'No /CN=, access denied: ' + dn)
-        return error_request(start_response, '403 Access denied', 'Malformed DN')
-    uididx = dn.find('/CN=UID:')
-    if uididx >= 0:
-        cn = dn[uididx+8:]
+        if ip != '127.0.0.1':
+            logmsg(ip, '-', 'No client cert, access denied')
+            return error_request(start_response, '403 Access denied', 'Client cert required')
+        cn = 'localhost'
     else:
-        cn = dn[cnidx+4:]
-    endidx = cn.find('/')
-    if endidx >= 0:
-        cn = cn[0:endidx]
+        dn = environ['SSL_CLIENT_S_DN']
+        if dn not in dns:
+            logmsg(ip, '-', 'DN unrecognized, access denied: ' + dn)
+            return error_request(start_response, '403 Access denied', 'Unrecognized DN')
+
+        cnidx = dn.find('/CN=')
+        if cnidx < 0:
+            logmsg(ip, '-', 'No /CN=, access denied: ' + dn)
+            return error_request(start_response, '403 Access denied', 'Malformed DN')
+        uididx = dn.find('/CN=UID:')
+        if uididx >= 0:
+            cn = dn[uididx+8:]
+        else:
+            cn = dn[cnidx+4:]
+        endidx = cn.find('/')
+        if endidx >= 0:
+            cn = cn[0:endidx]
 
     cid = ''
     if 'cid' in parameters:
