@@ -331,10 +331,10 @@ def dispatch(environ, start_response):
         if not os.path.exists(queuedir):
             os.mkdir(queuedir)
         ciddir = os.path.join(queuedir,os.path.dirname(cid))
+        cidpath = os.path.join(queuedir,cid)
         try:
             if not os.path.exists(ciddir):
                 os.mkdir(ciddir)
-            cidpath = os.path.join(queuedir,cid)
             contentlength = environ.get('CONTENT_LENGTH','0')
             length = int(contentlength)
             input = environ['wsgi.input']
@@ -355,6 +355,10 @@ def dispatch(environ, start_response):
             pubqueue.put([cid, ''])
         except Exception, e:
             logmsg(ip, cn, 'error getting publish data: ' + str(e))
+            try:
+                os.remove(cidpath)
+            except OSError:
+                pass
             return bad_request(start_response, ip, cn, 'error getting publish data')
         return good_request(start_response, 'OK\n')
 

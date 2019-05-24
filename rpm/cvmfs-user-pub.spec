@@ -99,6 +99,7 @@ done
 
 #- make the publish api touch a timestamp file if cid already present
 #- change api requests from localhost to not require authentication
+#- remove publish file if creating it causes an error
 
 * Wed May 01 2019 Dave Dykstra <dwd@fnal.gov> 0.8-1
 - support gc on snapshots
