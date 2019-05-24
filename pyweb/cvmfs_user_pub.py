@@ -347,12 +347,6 @@ def dispatch(environ, start_response):
                     output.write(buf)
                     length -= len(buf)
             logmsg(ip, cn, 'wrote ' + contentlength + ' bytes to ' + cidpath)
-            inrepo = cidinrepo(cid, conf)
-            if inrepo is not None:
-                logmsg(ip, cn, cid + ' already present in ' + inrepo)
-                pubqueue.put([cid, 'ts'])
-                return good_request(start_response, 'PRESENT\n')
-            pubqueue.put([cid, ''])
         except Exception, e:
             logmsg(ip, cn, 'error getting publish data: ' + str(e))
             try:
@@ -360,6 +354,12 @@ def dispatch(environ, start_response):
             except OSError:
                 pass
             return bad_request(start_response, ip, cn, 'error getting publish data')
+        inrepo = cidinrepo(cid, conf)
+        if inrepo is not None:
+            logmsg(ip, cn, cid + ' already present in ' + inrepo)
+            pubqueue.put([cid, 'ts'])
+            return good_request(start_response, 'PRESENT\n')
+        pubqueue.put([cid, ''])
         return good_request(start_response, 'OK\n')
 
     logmsg(ip, cn, 'Unrecognized api ' + pathinfo)
