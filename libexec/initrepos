@@ -68,6 +68,7 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
 done
 
 if $ADDEDONE; then
-    systemctl restart cvmfs-user-pub
+    systemctl stop cvmfs-user-pub
+    systemctl start cvmfs-user-pub
 fi
 
