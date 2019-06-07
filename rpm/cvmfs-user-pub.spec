@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 0.8
+Version: 0.9
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -68,6 +68,12 @@ fi
 
 systemctl daemon-reload
 
+if ! grep ^OPENSSL_ALLOW_PROXY_CERTS=1 /etc/sysconfig/httpd >/dev/null 2>&1; then
+    (echo
+    echo '# added by cvmfs-user-pub post install'
+    echo 'OPENSSL_ALLOW_PROXY_CERTS=1') >>/etc/sysconfig/httpd
+fi
+
 for service in cvmfs-user-pub httpd; do
     if ! systemctl is-enabled --quiet $service; then
         systemctl enable $service
@@ -96,10 +102,11 @@ done
 
 
 %changelog
-
-#- make the publish api touch a timestamp file if cid already present
-#- change api requests from localhost to not require authentication
-#- remove publish file if creating it causes an error
+* Fri Jun 07 2019 Dave Dykstra <dwd@fnal.gov> 0.9-1
+- make the publish api touch a timestamp file if cid already present
+- change api requests from localhost to not require authentication
+- remove publish file if creating it causes an error
+- add support for up to 7 layers of RFC proxies
 
 * Wed May 01 2019 Dave Dykstra <dwd@fnal.gov> 0.8-1
 - support gc on snapshots
