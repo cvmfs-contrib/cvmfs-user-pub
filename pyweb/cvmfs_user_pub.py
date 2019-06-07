@@ -15,7 +15,7 @@
 import os, threading, time, datetime
 import Queue, socket, subprocess, select
 import urlparse, urllib
-import shutil
+import shutil, re
 
 confcachetime = 300  # 5 minutes
 userpubconffile = '/etc/cvmfs-user-pub.conf'
@@ -289,14 +289,27 @@ def dispatch(environ, start_response):
         cn = 'localhost'
     else:
         dn = environ['SSL_CLIENT_S_DN']
+
+        cnidx = -1
+        while True:
+            cnidx = dn.rfind('/CN=')
+            if cnidx < 0:
+                logmsg(ip, '-', 'No /CN=, access denied: ' + dn)
+                return error_request(start_response, '403 Access denied', 'Malformed DN')
+            cnvalue = dn[cnidx+4:]
+            numbers = re.findall('\d+', cnvalue)
+            logmsg(ip, '-', 'numbers: ' + str(numbers))
+            if len(numbers) == 1 and numbers[0] == cnvalue:
+                # delete a level of proxy from the end
+                dn = dn[0:cnidx]
+            else:
+                # not a proxy level
+                break
+
         if dn not in dns:
             logmsg(ip, '-', 'DN unrecognized, access denied: ' + dn)
             return error_request(start_response, '403 Access denied', 'Unrecognized DN')
 
-        cnidx = dn.find('/CN=')
-        if cnidx < 0:
-            logmsg(ip, '-', 'No /CN=, access denied: ' + dn)
-            return error_request(start_response, '403 Access denied', 'Malformed DN')
         uididx = dn.find('/CN=UID:')
         if uididx >= 0:
             cn = dn[uididx+8:]
