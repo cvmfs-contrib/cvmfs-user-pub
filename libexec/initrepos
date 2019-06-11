@@ -39,7 +39,9 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
             if ! cvmfs_server transaction $REPO; then
                 echo "Cannot start transaction, skipping making .cvmfsdirtab"
             else
-                (echo "/$PREFIX/*"; echo "/$PREFIX/*/*") >/cvmfs/$REPO/.cvmfsdirtab
+                (echo "/*";
+                echo "/$PREFIX/*";
+                echo "/ts/*") >/cvmfs/$REPO/.cvmfsdirtab
                 chown cvmfspub /cvmfs/$REPO/.cvmfsdirtab
                 rm -f /cvmfs/$REPO/new_repository
                 cvmfs_server publish $REPO
