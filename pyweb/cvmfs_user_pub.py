@@ -133,19 +133,23 @@ def findcids(path):
         if not hassubcatalog:
             yield upper
 
-# return True if the cid and its timestamps are all older than maxdays
+# Return True if the cid and its timestamps are all older than maxdays.
+# Return False if not found, which can happen because there is a delay
+#  between publish and the time that updates appear in /cvmfs2.
 def cidexpired(cid, conf, now):
+    foundone = False
     if 'hostrepo' in conf:
         for hostrepo in conf['hostrepo']:
             repo = hostrepo[hostrepo.find(':')+1:]
             for pubdir in ['ts', prefix]:
                 path = '/cvmfs2/' + repo + '/' + pubdir + '/' + cid
                 if os.path.exists(path):
+                    foundone = True
                     seconds = os.path.getmtime(path)
                     days = int((now - seconds) / (60 * 60 * 24))
                     if (days <= maxdays):
                         return False
-    return True
+    return foundone
 
 def runthreadcmd(cmd, msg):
     threadmsg(cmd)
@@ -186,7 +190,7 @@ def publishloop(repo, reponum, conf):
 
         if cid is not None:
             pubdir = prefix
-            if option == 'ts':
+            if 'ts' in option:
                 # This particular directory name 'ts' (for timestamp)
                 #  tells the publish script to only touch the file
                 pubdir = 'ts'
@@ -194,9 +198,10 @@ def publishloop(repo, reponum, conf):
             cmd = "/usr/libexec/cvmfs-user-pub/publish " + repo + " " + \
                     queuedir + " " + pubdir + " '" + cid + "'"
             returncode = runthreadcmd(cmd, 'publish ' + cid)
-            cidpath = os.path.join(queuedir,cid)
-            threadmsg('removing ' + cidpath)
-            os.remove(cidpath)
+            if 'queued' in option:
+                cidpath = os.path.join(queuedir,cid)
+                threadmsg('removing ' + cidpath)
+                os.remove(cidpath)
 
         thishour = datetime.datetime.now().hour
         if thishour != (gcstarthour - 1 + reponum) % 24:
@@ -383,12 +388,23 @@ def dispatch(environ, start_response):
         if inrepo is not None:
             logmsg(ip, cn, 'present in ' + inrepo + ': ' + cid)
             return good_request(start_response, 'PRESENT\n')
-        logmsg(ip, cn, 'missing: ' + cid)
+        logmsg(ip, cn, cid + ' missing')
+        return good_request(start_response, 'MISSING\n')
+
+    if pathinfo == '/update':
+        if cid == '':
+            return bad_request(start_response, ip, cn, 'update with no cid')
+        inrepo = cidinrepo(cid, conf)
+        if inrepo is not None:
+            logmsg(ip, cn, cid + ' present in ' + inrepo + ', updating')
+            pubqueue.put([cid, conf, 'ts'])
+            return good_request(start_response, 'PRESENT\n')
+        logmsg(ip, cn, cid + ' missing')
         return good_request(start_response, 'MISSING\n')
 
     if pathinfo == '/publish':
         if cid == '':
-            return bad_request(start_response, ip, cn, 'pathinfo with no cid')
+            return bad_request(start_response, ip, cn, 'publish with no cid')
         if not os.path.exists(queuedir):
             os.mkdir(queuedir)
         ciddir = os.path.join(queuedir,os.path.dirname(cid))
@@ -418,9 +434,9 @@ def dispatch(environ, start_response):
         inrepo = cidinrepo(cid, conf)
         if inrepo is not None:
             logmsg(ip, cn, cid + ' already present in ' + inrepo)
-            pubqueue.put([cid, conf, 'ts'])
+            pubqueue.put([cid, conf, 'ts,queued'])
             return good_request(start_response, 'PRESENT\n')
-        pubqueue.put([cid, conf, ''])
+        pubqueue.put([cid, conf, 'queued'])
         return good_request(start_response, 'OK\n')
 
     logmsg(ip, cn, 'Unrecognized api ' + pathinfo)
