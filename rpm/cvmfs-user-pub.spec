@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 0.9
+Version: 1.0
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -16,8 +16,8 @@ Requires: cvmfs-server >= 2.5.1
 Requires: cvmfs
 
 %description
-Accepts tarballs from authenticated users and publishes them in a
-cvmfs repository.
+Accepts tarballs from authenticated users and publishes them in a cvmfs
+repository.  Automatically cleans them out after maxdays of no use.
 
 %prep
 %setup -q
@@ -102,6 +102,11 @@ done
 
 
 %changelog
+* Tue Jun 11 2019 Dave Dykstra <dwd@fnal.gov> 1.0-1
+- add updates api to touch a timestamp only if cid is present
+- add automatic removal, including maxdays config option
+- support cids with zero or one slashes
+
 * Fri Jun 07 2019 Dave Dykstra <dwd@fnal.gov> 0.9-1
 - make the publish api touch a timestamp file if cid already present
 - change api requests from localhost to not require authentication
