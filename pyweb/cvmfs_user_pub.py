@@ -9,8 +9,10 @@
 #               publish, otherwise returns OK and publishing will
 #               happen as soon as possible.
 #               
-# cid is the Code IDentifier, expected to be a secure hash of the tarball
-#  but can be anything that is unique per tarball.
+# cid is the Code IDentifier, expected to be a secure hash of the
+# tarball but can be anything that is unique per tarball.  It may
+# optionally contain a slash to group tarballs by project (but no more
+# than one slash).
 
 import os, threading, time, datetime
 import Queue, socket, subprocess, select
@@ -23,15 +25,13 @@ alloweddnsfile = '/etc/grid-security/grid-mapfile'
 queuedir = '/tmp/cvmfs-user-pub'
 prefix = 'sw'
 gcstarthour = 3
-conf = {}
+maxdays = 30
 alloweddns = set()
 confupdatetime = 0
 userpubconfmodtime = 0
 alloweddnsmodtime = 0
 conflock = threading.Lock()
 pubqueue = Queue.Queue()
-deletelock = threading.Lock()
-deletes = {}
 
 def logmsg(ip, id, msg):
     print '(' + ip + ' ' + id + ') '+ msg
@@ -111,6 +111,42 @@ def parse_alloweddns():
 
     return newdns
 
+# Generate all cids in the tree below path.  Cids can have zero or one
+#  slashes.  Assume they have zero slashes if the first subdirectory found
+#  has no .cvmfscatalog, otherwise assume they have one slash.  Cids of both
+#  types may be intermixed if desired.
+def findcids(path):
+    for upper in os.listdir(path):
+        uppath = path + '/' + upper
+        if not os.path.isdir(uppath):
+            continue
+        hassubcatalog = False
+        for lower in os.listdir(uppath):
+            lowpath = uppath + '/' + lower
+            if not os.path.isdir(lowpath):
+                continue
+            if not hassubcatalog:
+                if not os.path.exists(lowpath + '/.cvmfscatalog'):
+                    break
+                hassubcatalog = True
+            yield upper + '/' + lower
+        if not hassubcatalog:
+            yield upper
+
+# return True if the cid and its timestamps are all older than maxdays
+def cidexpired(cid, conf, now):
+    if 'hostrepo' in conf:
+        for hostrepo in conf['hostrepo']:
+            repo = hostrepo[hostrepo.find(':')+1:]
+            for pubdir in ['ts', prefix]:
+                path = '/cvmfs2/' + repo + '/' + pubdir + '/' + cid
+                if os.path.exists(path):
+                    seconds = os.path.getmtime(path)
+                    days = int((now - seconds) / (60 * 60 * 24))
+                    if (days <= maxdays):
+                        return False
+    return True
+
 def runthreadcmd(cmd, msg):
     threadmsg(cmd)
     p = subprocess.Popen( ('/bin/bash', '-c', cmd), bufsize=1, 
@@ -137,13 +173,13 @@ def runthreadcmd(cmd, msg):
     return p.returncode
 
 # do the operations on a cvmfs repository
-def publishloop(repo, reponum):
+def publishloop(repo, reponum, conf):
     threadmsg('thread ' + str(reponum) + ' started for publishing to /cvmfs/' + repo)
     gcdone = False
     while True:
         cid = None
         try:
-            cid, option = pubqueue.get(True, 60)
+            cid, conf, option = pubqueue.get(True, 60)
         except Queue.Empty, e:
             # cid will be None in this case
             pass
@@ -162,33 +198,55 @@ def publishloop(repo, reponum):
             threadmsg('removing ' + cidpath)
             os.remove(cidpath)
 
-        deletelock.acquire()
-        if repo in deletes:
-            deletelist = deletes[repo]
-            del deletes[repo]
-            deletelock.release()
+        thishour = datetime.datetime.now().hour
+        if thishour != (gcstarthour - 1 + reponum) % 24:
+            gcdone = False
+            continue
+        if gcdone:
+            continue
+
+        # time for cleanup too
+        threadmsg('starting cleanup in ' + repo)
+
+        now = int(time.time())
+        dirdeletelist = []
+        filedeletelist = []
+
+        # find expired cids in this repo, put on list to delete
+        cidpath = '/cvmfs/' + repo + '/' + prefix
+        for cid in findcids(cidpath):
+            if cidexpired(cid, conf, now):
+                dirdeletelist.append(cidpath + '/' + cid)
+
+        # find ts files in this repo that have no matching cid
+        tspath = '/cvmfs/' + repo + '/ts'
+        for dirpath, _, files in os.walk(tspath):
+            ciddir =  dirpath[len(tspath)+1:]
+            if ciddir != '':
+                ciddir = ciddir + '/'
+            for file in files:
+                cid = ciddir + file
+                if cidinrepo(cid, conf) is None:
+                    filedeletelist.append(tspath + '/' + cid)
+
+        if len(dirdeletelist) > 0 or len(filedeletelist) > 0:
             threadmsg('starting transaction for deletes in ' + repo)
             cmd = "cvmfs_server transaction '" + repo + "'"
             if runthreadcmd(cmd, 'start transaction ' + repo) == 0:
-                for deletedir in deletelist:
-                    dir = '/cvmfs/' + repo + '/' + prefix + '/' + deletedir
+                for dir in dirdeletelist:
                     threadmsg('removing ' + dir)
                     shutil.rmtree(dir)
+                for file in filedeletelist:
+                    threadmsg('removing ' + file)
+                    os.remove(file)
                 threadmsg('publishing deletes in ' + repo)
                 cmd = "cvmfs_server publish '" + repo + "'"
                 runthreadcmd(cmd, 'publishing deletes ' + repo)
-        else:
-            deletelock.release()
 
-        thishour = datetime.datetime.now().hour
-        if thishour == (gcstarthour - 1 + reponum) % 24:
-            if not gcdone:
-                threadmsg('running gc on ' + repo)
-                cmd = "cvmfs_server gc -f '" + repo + "'"
-                runthreadcmd(cmd, 'gc ' + repo)
-                gcdone = True
-        else:
-            gcdone = False
+        threadmsg('running gc on ' + repo)
+        cmd = "cvmfs_server gc -f '" + repo + "'"
+        runthreadcmd(cmd, 'gc ' + repo)
+        gcdone = True
 
 def cidinrepo(cid, conf):
     if 'hostrepo' in conf:
@@ -205,28 +263,30 @@ def dispatch(environ, start_response):
     ip = environ['REMOTE_ADDR']
 
     now = int(time.time())
-    global userpubconf
-    global alloweddns
-    global confupdatetime
-    global queuedir
-    global prefix
-    global gcstarthour
     conflock.acquire()
     if (now - confupdatetime) > confcachetime:
+        global confupdatetime
         confupdatetime = now
         conflock.release()
         newconf = parse_conf()
         newdns = parse_alloweddns()
 
         # things to do when config file has changed
+        global queuedir
         if 'queuedir' in newconf:
             queuedir = newconf['queuedir'][0]
 
+        global prefix
         if 'prefix' in newconf:
             prefix = newconf['prefix'][0]
 
+        global gcstarthour
         if 'gcstarthour' in newconf:
             gcstarthour = int(newconf['gcstarthour'][0])
+
+        global maxdays
+        if 'maxdays' in newconf:
+            maxdays = int(newconf['maxdays'][0])
 
         if 'hostrepo' in newconf:
             myhost = socket.gethostname()
@@ -248,11 +308,13 @@ def dispatch(environ, start_response):
                 if not gotit:
                     thread = threading.Thread(name=pubrepo,
                                               target=publishloop,
-                                              args=[repo, reponum])
+                                              args=[repo, reponum, newconf])
                     thread.start()
 
         conflock.acquire()
+        global userpubconf
         userpubconf = newconf
+        global alloweddns
         alloweddns = newdns
     conf = userpubconf
     dns = alloweddns
@@ -265,22 +327,6 @@ def dispatch(environ, start_response):
     parameters = {}
     if 'QUERY_STRING' in environ:
         parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
-
-    if pathinfo == '/delete':
-        if ip != '127.0.0.1':
-            return bad_request(start_response, ip, '-', 'Delete may only be run from localhost')
-        if 'cid' not in parameters:
-            return bad_request(start_response, ip, '-', 'no cid')
-        cid = parameters['cid'][0]
-        inrepo = cidinrepo(cid, conf)
-        if inrepo is None:
-            return bad_request(start_response, ip, '-', 'cid not found')
-        deletelock.acquire()
-        if inrepo not in deletes:
-            deletes[inrepo] = []
-        deletes[inrepo].append(cid)
-        deletelock.release()
-        return good_request(start_response, 'OK\n')
 
     if 'SSL_CLIENT_S_DN' not in environ:
         if ip != '127.0.0.1':
@@ -298,7 +344,6 @@ def dispatch(environ, start_response):
                 return error_request(start_response, '403 Access denied', 'Malformed DN')
             cnvalue = dn[cnidx+4:]
             numbers = re.findall('\d+', cnvalue)
-            logmsg(ip, '-', 'numbers: ' + str(numbers))
             if len(numbers) == 1 and numbers[0] == cnvalue:
                 # delete a level of proxy from the end
                 dn = dn[0:cnidx]
@@ -327,6 +372,9 @@ def dispatch(environ, start_response):
         if ("'" in cid) or ('\\' in cid):
             # these are special to bash inside of single quotes
             return bad_request(start_response, ip, cn, 'disallowed character in cid')
+        if cid.count('/') > 1:
+            # without this restriction it is challenging for cleanup
+            return bad_request(start_response, ip, cn, 'at most one slash allowed in cid')
 
     if pathinfo == '/exists':
         if cid == '':
@@ -370,9 +418,9 @@ def dispatch(environ, start_response):
         inrepo = cidinrepo(cid, conf)
         if inrepo is not None:
             logmsg(ip, cn, cid + ' already present in ' + inrepo)
-            pubqueue.put([cid, 'ts'])
+            pubqueue.put([cid, conf, 'ts'])
             return good_request(start_response, 'PRESENT\n')
-        pubqueue.put([cid, ''])
+        pubqueue.put([cid, conf, ''])
         return good_request(start_response, 'OK\n')
 
     logmsg(ip, cn, 'Unrecognized api ' + pathinfo)
