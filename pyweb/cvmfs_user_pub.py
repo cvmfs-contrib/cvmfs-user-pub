@@ -395,7 +395,7 @@ def dispatch(environ, start_response):
         if inrepo is not None:
             logmsg(ip, cn, 'present in ' + inrepo + ': ' + cid)
             return good_request(start_response,
-                'PRESENT:' + repocidpath(repo, cid) + '\n')
+                'PRESENT:' + repocidpath(inrepo, cid) + '\n')
         logmsg(ip, cn, cid + ' missing')
         return good_request(start_response, 'MISSING\n')
 
@@ -407,7 +407,7 @@ def dispatch(environ, start_response):
             logmsg(ip, cn, cid + ' present in ' + inrepo + ', updating')
             pubqueue.put([cid, conf, 'ts'])
             return good_request(start_response,
-                'PRESENT:' + repocidpath(repo, cid) + '\n')
+                'PRESENT:' + repocidpath(inrepo, cid) + '\n')
         logmsg(ip, cn, cid + ' missing, skipping update')
         return good_request(start_response, 'MISSING\n')
 
@@ -445,7 +445,7 @@ def dispatch(environ, start_response):
             logmsg(ip, cn, cid + ' already present in ' + inrepo)
             pubqueue.put([cid, conf, 'ts,queued'])
             return good_request(start_response,
-                'PRESENT:' + repocidpath(repo, cid) + '\n')
+                'PRESENT:' + repocidpath(inrepo, cid) + '\n')
         pubqueue.put([cid, conf, 'queued'])
         return good_request(start_response, 'OK\n')
 
