@@ -1,13 +1,17 @@
-# Dispatch a pub-abi request
+# Dispatch a cvmfs-user-pub api request
 # URLs are of the form /pubapi/<request>?cid=xxxxx
 #  where <request> is one of
-#     exists :  returns in the body PRESENT if cid xxxxx is already
+#     exists :  Returns in the body PRESENT:path if cid xxxxx is already
 #               published in any repository or is queued for publish
-#               on this server, otherwise MISSING
-#     publish : queues tarball in POSTed body for publication in cid
-#               xxxxx.  If already present, returns PRESENT skips
-#               publish, otherwise returns OK and publishing will
-#               happen as soon as possible.
+#               on this server, otherwise returns MISSING. "path" is the
+#               full path to where the cid was published.
+#     update :  Exactly like "exists" except that if the cid xxxxx is
+#               present, also queues a publish to update a timestamp for
+#               the cid, in any repository.
+#     publish : Queues tarball in POSTed body for publication in cid
+#               xxxxx.  If already present, returns PRESENT:path and
+#               publishes a timestamp like "update", otherwise returns OK
+#               and publishing is queued to happen as soon as possible.
 #               
 # cid is the Code IDentifier, expected to be a secure hash of the
 # tarball but can be anything that is unique per tarball.  It may
@@ -261,6 +265,9 @@ def cidinrepo(cid, conf):
                 return repo
     return None
 
+def repocidpath(repo, cid):
+    return '/cvmfs/' + repo + '/' + prefix + '/' + cid
+
 def dispatch(environ, start_response):
     if 'REMOTE_ADDR' not in environ:
         logmsg('-', '-', 'No REMOTE_ADDR')
@@ -387,7 +394,8 @@ def dispatch(environ, start_response):
         inrepo = cidinrepo(cid, conf)
         if inrepo is not None:
             logmsg(ip, cn, 'present in ' + inrepo + ': ' + cid)
-            return good_request(start_response, 'PRESENT\n')
+            return good_request(start_response,
+                'PRESENT:' + repocidpath(repo, cid) + '\n')
         logmsg(ip, cn, cid + ' missing')
         return good_request(start_response, 'MISSING\n')
 
@@ -398,8 +406,9 @@ def dispatch(environ, start_response):
         if inrepo is not None:
             logmsg(ip, cn, cid + ' present in ' + inrepo + ', updating')
             pubqueue.put([cid, conf, 'ts'])
-            return good_request(start_response, 'PRESENT\n')
-        logmsg(ip, cn, cid + ' missing')
+            return good_request(start_response,
+                'PRESENT:' + repocidpath(repo, cid) + '\n')
+        logmsg(ip, cn, cid + ' missing, skipping update')
         return good_request(start_response, 'MISSING\n')
 
     if pathinfo == '/publish':
@@ -435,7 +444,8 @@ def dispatch(environ, start_response):
         if inrepo is not None:
             logmsg(ip, cn, cid + ' already present in ' + inrepo)
             pubqueue.put([cid, conf, 'ts,queued'])
-            return good_request(start_response, 'PRESENT\n')
+            return good_request(start_response,
+                'PRESENT:' + repocidpath(repo, cid) + '\n')
         pubqueue.put([cid, conf, 'queued'])
         return good_request(start_response, 'OK\n')
 
