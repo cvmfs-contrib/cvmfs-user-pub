@@ -187,7 +187,7 @@ def publishloop(repo, reponum, conf):
     while True:
         cid = None
         try:
-            cid, conf, option = pubqueue.get(True, 60)
+            cid, cn, conf, option = pubqueue.get(True, 60)
         except Queue.Empty, e:
             # cid will be None in this case
             pass
@@ -200,7 +200,7 @@ def publishloop(repo, reponum, conf):
                 pubdir = 'ts'
             # enclose cid in single quotes because it comes from the user
             cmd = "/usr/libexec/cvmfs-user-pub/publish " + repo + " " + \
-                    queuedir + " " + pubdir + " '" + cid + "'"
+                    queuedir + " " + pubdir + " '" + cid + "' '" + cn + "'"
             returncode = runthreadcmd(cmd, 'publish ' + cid)
             if 'queued' in option:
                 cidpath = os.path.join(queuedir,cid)
@@ -405,7 +405,7 @@ def dispatch(environ, start_response):
         inrepo = cidinrepo(cid, conf)
         if inrepo is not None:
             logmsg(ip, cn, cid + ' present in ' + inrepo + ', updating')
-            pubqueue.put([cid, conf, 'ts'])
+            pubqueue.put([cid, cn, conf, 'ts'])
             return good_request(start_response,
                 'PRESENT:' + repocidpath(inrepo, cid) + '\n')
         logmsg(ip, cn, cid + ' missing, skipping update')
@@ -443,10 +443,10 @@ def dispatch(environ, start_response):
         inrepo = cidinrepo(cid, conf)
         if inrepo is not None:
             logmsg(ip, cn, cid + ' already present in ' + inrepo)
-            pubqueue.put([cid, conf, 'ts,queued'])
+            pubqueue.put([cid, cn, conf, 'ts,queued'])
             return good_request(start_response,
                 'PRESENT:' + repocidpath(inrepo, cid) + '\n')
-        pubqueue.put([cid, conf, 'queued'])
+        pubqueue.put([cid, cn, conf, 'queued'])
         return good_request(start_response, 'OK\n')
 
     logmsg(ip, cn, 'Unrecognized api ' + pathinfo)

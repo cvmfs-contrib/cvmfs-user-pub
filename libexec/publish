@@ -4,6 +4,7 @@ REPO="$1"
 QUEUEDIR="$2"
 PREFIX="$3"
 CID="$4"
+PUBLISHER="$5"
 set -e
 echo "starting transaction for publish in $REPO"
 if ! cvmfs_server transaction $REPO; then
@@ -15,7 +16,7 @@ SUBPATH="/cvmfs/$REPO/$PREFIX/$CID"
 if [ "$PREFIX" = "ts" ]; then
     echo "touching $SUBPATH"
     mkdir -p "${SUBPATH%/*}"
-    touch $SUBPATH
+    echo "$PUBLISHER" > $SUBPATH
 else
     echo "extracting into $SUBPATH"
     mkdir -p "$SUBPATH"
@@ -25,6 +26,7 @@ else
         exit
     fi
     touch $SUBPATH/.cvmfscatalog
+    echo "$PUBLISHER" > $SUBPATH/.publisher
 fi
 echo "publishing $SUBPATH"
 cvmfs_server publish $REPO
