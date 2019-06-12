@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.0
+Version: 1.1
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -102,6 +102,14 @@ done
 
 
 %changelog
+* Wed Jun 12 2019 Dave Dykstra <dwd@fnal.gov> 1.1-1
+- Add the previously published path after 'PRESENT:' for each of the
+  3 api calls (exists, update, publish) when cid is already present.
+- Save the CN of the person who published a tarball (or just the userid
+  if the CN ends in UID:userid) in a .publisher file in the top level
+  directory of an unpacked tarball, and also as the contents in timestamp
+  files.
+
 * Tue Jun 11 2019 Dave Dykstra <dwd@fnal.gov> 1.0-1
 - add updates api to touch a timestamp only if cid is present
 - add automatic removal, including maxdays config option
