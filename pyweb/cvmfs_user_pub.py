@@ -282,8 +282,8 @@ def dispatch(environ, start_response):
 
     now = int(time.time())
     conflock.acquire()
+    global confupdatetime
     if (now - confupdatetime) > confcachetime:
-        global confupdatetime
         confupdatetime = now
         conflock.release()
         newconf = parse_conf()
