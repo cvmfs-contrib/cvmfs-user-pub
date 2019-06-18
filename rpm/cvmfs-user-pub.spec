@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.1
+Version: 1.2
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -102,6 +102,9 @@ done
 
 
 %changelog
+* Tue Jun 18 2019 Dave Dykstra <dwd@fnal.gov> 1.2-1
+- Add config API to return list of repos.  http only to avoid user cert.
+
 * Wed Jun 12 2019 Dave Dykstra <dwd@fnal.gov> 1.1-1
 - Add the previously published path after 'PRESENT:' for each of the
   3 api calls (exists, update, publish) when cid is already present.
