@@ -126,6 +126,8 @@ def parse_alloweddns():
 #  has no .cvmfscatalog, otherwise assume they have one slash.  Cids of both
 #  types may be intermixed if desired.
 def findcids(path):
+    if not os.path.exists(path):
+        return
     for upper in os.listdir(path):
         uppath = path + '/' + upper
         if not os.path.isdir(uppath):
