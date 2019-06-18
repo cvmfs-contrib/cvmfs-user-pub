@@ -2,6 +2,7 @@
 # /etc/rc.d/init.d/cvmfs-user-pub
 #chkconfig: - 88 12
 #description: mounts and unmounts /cvmfs2 repositories
+#   and cleans up after reboot
 
 if [ -f /etc/init.d/functions ]; then
     . /etc/init.d/functions
@@ -27,6 +28,11 @@ for REPO in `sed -n 's/^hostrepo.*://p' /etc/cvmfs-user-pub.conf`; do
         if mount|grep -q " /cvmfs2/$REPO "; then
             umount /cvmfs2/$REPO
         fi
+    fi
+
+    if [ "$OP" = start ]; then
+        # sometimes a crash corrupts these
+        rm -f /srv/cvmfs/$REPO/.cvmfsreflog /var/spool/cvmfs/$REPO/reflog.chksum
     fi
 
     if [ "$OP" = start ] || [ "$OP" = restart ]; then
@@ -55,3 +61,8 @@ xEOFx
     fi
 
 done
+
+if [ "$OP" = start ]; then
+    # this needs to be done at boot time
+    cvmfs_server mount -a
+fi
