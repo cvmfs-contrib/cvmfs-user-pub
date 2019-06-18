@@ -12,11 +12,17 @@
 #               xxxxx.  If already present, returns PRESENT:path and
 #               publishes a timestamp like "update", otherwise returns OK
 #               and publishing is queued to happen as soon as possible.
+# All of the above are on https and require a user certificate.
 #               
 # cid is the Code IDentifier, expected to be a secure hash of the
 # tarball but can be anything that is unique per tarball.  It may
 # optionally contain a slash to group tarballs by project (but no more
 # than one slash).
+#
+# Additional API URLs on http without user cert of the form
+#  /pubapi/<request> where <request> is
+#     config :  Returns configuration, currently the label "repos:"
+#               followed by a comma-separated list of repositories
 
 import os, threading, time, datetime
 import Queue, socket, subprocess, select
@@ -339,6 +345,20 @@ def dispatch(environ, start_response):
     parameters = {}
     if 'QUERY_STRING' in environ:
         parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
+
+    if pathinfo == '/config':
+        logmsg(ip, '-', 'Returning config')
+        body = 'repos:'
+        if 'hostrepo' in conf:
+            gotone = False
+            for hostrepo in conf['hostrepo']:
+                if gotone:
+                    body += ','
+                else:
+                    gotone = True
+                body += hostrepo[hostrepo.find(':')+1:]
+        body += '\n'
+        return good_request(start_response, body)
 
     if 'SSL_CLIENT_S_DN' not in environ:
         if ip != '127.0.0.1':
