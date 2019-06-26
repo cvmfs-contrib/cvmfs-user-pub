@@ -19,10 +19,11 @@
 # optionally contain a slash to group tarballs by project (but no more
 # than one slash).
 #
-# Additional API URLs on http without user cert of the form
+# Additional API URLs on http or https without user cert of the form
 #  /pubapi/<request> where <request> is
 #     config :  Returns configuration, currently the label "repos:"
 #               followed by a comma-separated list of repositories
+#     ping :   Returns OK in the body
 
 import os, threading, time, datetime
 import Queue, socket, subprocess, select
@@ -361,6 +362,9 @@ def dispatch(environ, start_response):
                 body += hostrepo[hostrepo.find(':')+1:]
         body += '\n'
         return good_request(start_response, body)
+
+    if pathinfo == '/ping':
+        return good_request(start_response, 'OK\n')
 
     if 'SSL_CLIENT_S_DN' not in environ:
         if ip != '127.0.0.1':
