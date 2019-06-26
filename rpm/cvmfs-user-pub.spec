@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.2
+Version: 1.3
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -102,6 +102,11 @@ done
 
 
 %changelog
+* Wed Jun 26 2019 Dave Dykstra <dwd@fnal.gov> 1.3-1
+- Do cvmfs_server mount -a and clean out reflogs at boot time
+- Make client certificate optional
+- Add ping api
+
 * Tue Jun 18 2019 Dave Dykstra <dwd@fnal.gov> 1.2-1
 - Add config API to return list of repos.  http only to avoid user cert.
 
