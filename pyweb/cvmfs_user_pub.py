@@ -38,6 +38,7 @@ prefix = 'sw'
 gcstarthour = 3
 maxdays = 30
 alloweddns = set()
+userpubconf = {}
 confupdatetime = 0
 userpubconfmodtime = 0
 alloweddnsmodtime = 0
@@ -286,6 +287,7 @@ def dispatch(environ, start_response):
     now = int(time.time())
     conflock.acquire()
     global confupdatetime
+    global userpubconf
     if (now - confupdatetime) > confcachetime:
         confupdatetime = now
         conflock.release()
@@ -333,7 +335,6 @@ def dispatch(environ, start_response):
                     thread.start()
 
         conflock.acquire()
-        global userpubconf
         userpubconf = newconf
         global alloweddns
         alloweddns = newdns
