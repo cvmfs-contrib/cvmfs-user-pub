@@ -290,7 +290,10 @@ def dispatch(environ, start_response):
     global userpubconf
     if (now - confupdatetime) > confcachetime:
         confupdatetime = now
-        conflock.release()
+        if len(userpubconf) != 0:
+            # release if not reading for the first time, to
+            #   let other threads continue to use the old copy
+            conflock.release()
         newconf = parse_conf()
         newdns = parse_alloweddns()
 
@@ -334,7 +337,8 @@ def dispatch(environ, start_response):
                                               args=[repo, reponum, newconf])
                     thread.start()
 
-        conflock.acquire()
+        if len(userpubconf) != 0:
+            conflock.acquire()
         userpubconf = newconf
         global alloweddns
         alloweddns = newdns
