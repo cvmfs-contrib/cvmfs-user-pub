@@ -1,7 +1,7 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
 Version: 1.4
-Release: 1%{?dist}
+Release: 2%{?dist}
 BuildArch: noarch
 Group: Applications/System
 License: BSD
@@ -102,6 +102,10 @@ done
 
 
 %changelog
+* Mon Jul 08 2019 Dave Dykstra <dwd@fnal.gov> 1.4-2
+- Add COPYING with the Fermitools license to the source, refer to it
+  in source files.
+
 * Mon Jul 08 2019 Dave Dykstra <dwd@fnal.gov> 1.4-1
 - Fix crash at startup due to missing userpubconf global variable
 

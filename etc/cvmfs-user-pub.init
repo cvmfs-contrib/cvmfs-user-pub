@@ -3,6 +3,10 @@
 #chkconfig: - 88 12
 #description: mounts and unmounts /cvmfs2 repositories
 #   and cleans up after reboot
+#
+# This source file is Copyright (c) 2019, FERMI NATIONAL ACCELERATOR
+#    LABORATORY.  All rights reserved.
+# For details of the Fermitools (BSD) license see COPYING.
 
 if [ -f /etc/init.d/functions ]; then
     . /etc/init.d/functions

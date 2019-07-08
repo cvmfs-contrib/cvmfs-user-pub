@@ -1,4 +1,8 @@
 #!/bin/bash
+#
+# This source file is Copyright (c) 2019, FERMI NATIONAL ACCELERATOR
+#    LABORATORY.  All rights reserved.
+# For details of the Fermitools (BSD) license see COPYING.
 
 # the if check should not be needed with cvmfs-server-2.6.1 and later
 if [ -n "`find /etc/cvmfs/repositories.d -name replica.conf 2>/dev/null|head -1`" ]; then

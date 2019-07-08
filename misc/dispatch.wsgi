@@ -1,4 +1,8 @@
 #! /usr/bin/env python
+#
+# This source file is Copyright (c) 2019, FERMI NATIONAL ACCELERATOR
+#    LABORATORY.  All rights reserved.
+# For details of the Fermitools (BSD) license see COPYING.
 
 import cvmfs_user_pub
 

@@ -24,6 +24,10 @@
 #     config :  Returns configuration, currently the label "repos:"
 #               followed by a comma-separated list of repositories
 #     ping :   Returns OK in the body
+#
+# This source file is Copyright (c) 2019, FERMI NATIONAL ACCELERATOR
+#    LABORATORY.  All rights reserved.
+# For details of the Fermitools (BSD) license see COPYING.
 
 import os, threading, time, datetime
 import Queue, socket, subprocess, select
