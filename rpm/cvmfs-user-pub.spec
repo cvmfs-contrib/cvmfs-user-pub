@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.3
+Version: 1.4
 Release: 1%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -102,6 +102,9 @@ done
 
 
 %changelog
+* Mon Jul 08 2019 Dave Dykstra <dwd@fnal.gov> 1.4-1
+- Fix crash at startup due to missing userpubconf global variable
+
 * Wed Jun 26 2019 Dave Dykstra <dwd@fnal.gov> 1.3-1
 - Do cvmfs_server mount -a and clean out reflogs at boot time
 - Make client certificate optional
