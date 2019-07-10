@@ -7,3 +7,5 @@ from the 2019 CernVM Workshop.
 
 The API is described in the comments of
 [pyweb/cvmfs_user_pub.py](pyweb/cvmfs_user_pub.py)
+and the configuration is in the comments of
+[etc/cvmfs-user-pub.conf](etc/cvmfs-user-pub.conf).
