@@ -3,7 +3,7 @@ Name: cvmfs-user-pub
 Version: 1.4
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 3
-Release: 3%{?dist}
+Release: %{release_prefix}%{?dist}
 BuildArch: noarch
 Group: Applications/System
 License: BSD
