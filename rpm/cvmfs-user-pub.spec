@@ -1,7 +1,9 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
 Version: 1.4
-Release: 2%{?dist}
+# The release_prefix macro is used in the OBS prjconf, don't change its name
+%define release_prefix 3
+Release: 3%{?dist}
 BuildArch: noarch
 Group: Applications/System
 License: BSD
@@ -102,6 +104,9 @@ done
 
 
 %changelog
+* Wed Jul 10 2019 Dave Dykstra <dwd@fnal.gov> 1.4-3
+- Make buildable by OBS
+
 * Mon Jul 08 2019 Dave Dykstra <dwd@fnal.gov> 1.4-2
 - Add COPYING with the Fermitools license to the source, refer to it
   in source files.
