@@ -14,17 +14,103 @@ if [ -z "$PREFIX" ]; then
 fi
 MYHOSTLONG="`hostname`"
 MYHOSTSHORT="`hostname -s`"
+
+OTHERHOST=""
+for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
+    HOST="`echo $HOSTREPO|sed 's/:.*//'`"
+    if [ "$HOST" != "$MYHOSTLONG" ] && [ "$HOST" != "$MYHOSTSHORT" ]; then
+        if [[ $HOST == *.* ]]; then
+            OTHERHOST=$HOST
+        else
+            OTHERHOST=$HOST${MYHOSTLONG#"$MYHOSTSHORT"}
+        fi
+    fi
+done
+
 ADDEDONE=false
 for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
     HOST="`echo $HOSTREPO|sed 's/:.*//'`"
     REPO="`echo $HOSTREPO|sed 's/.*://'`"
+    if [ -d /etc/cvmfs/repositories.d/$REPO ]; then
+        continue
+    fi
+
     if [ "$HOST" = "$MYHOSTLONG" ] || [ "$HOST" = "$MYHOSTSHORT" ]; then
-        if [ ! -d /srv/cvmfs/$REPO ]; then
-            if ! cvmfs_server mkfs -o cvmfspub -G '1 day ago' -z $REPO; then
+        MYREPO=true
+    else
+        MYREPO=false
+    fi
+
+    if [ -d /srv/cvmfs/$REPO ]; then
+        # data previously existed, save it to re-use
+        if [ -d /srv/cvmfs/.$REPO.SAV ]; then
+            echo "Refusing to overwrite saved data, skipping $REPO"
+            continue
+        fi
+        echo "Saving /srv/cvmfs/$REPO in /srv/cvfs/.$REPO.SAV"
+        mv /srv/cvmfs/$REPO /srv/cvmfs/.$REPO.SAV
+    fi
+
+    REPOPUB=/etc/cvmfs/keys/$REPO.pub
+    DOMAIN="`echo $REPO|cut -d. -f2-`"
+    if [ ! -f $REPOPUB ]; then
+        REPOPUB=""
+    else
+        REPOPUB="$REPOPUB:"
+    fi
+    PUB=/etc/cvmfs/keys/$DOMAIN.pub
+    if [ ! -f $PUB ]; then
+        PUB=/etc/cvmfs/keys/$DOMAIN/$DOMAIN.pub
+        if [ ! -f $PUB ] && [ -z "$REPOPUB" ]; then
+            echo "No key found for $REPO"
+            continue
+        fi
+    fi
+    PUB="$REPOPUB$PUB"
+    ADDEDONE=true
+
+    if [ $MYREPO ]; then
+        REPHOST=$OTHERHOST
+    else
+        REPHOST=$HOST
+    fi
+    echo "Adding replica $REPO from $REPHOST"
+    if ! cvmfs_server add-replica -o cvmfspub http://$REPHOST/cvmfs/$REPO $PUB; then
+        echo "Failed to add-replica $REPO from $REPHOST with key $PUB"
+        if ! $MYREPO; then
+            continue
+        fi
+    fi
+    if [ -d /srv/cvmfs/.$REPO.SAV ]; then
+        echo "Restoring /srv/cvmfs/$REPO from /srv/cvfs/.$REPO.SAV"
+        rm -rf /srv/cvmfs/$REPO
+        mv /srv/cvmfs/.$REPO.SAV /srv/cvmfs/$REPO
+    fi
+    if ! cvmfs_server snapshot $REPO; then
+        echo "Failed to make initial snapshot of $REPO from $REPHOST"
+        if ! $MYREPO; then
+            continue
+        fi
+    fi
+
+    if $MYREPO; then
+        if [ -d /etc/cvmfs/repositories.d/$REPO ]; then
+            # have now restored a backup from the other host, so
+            #  remove the configuration but leave the data
+            echo "Removing cvmfs repo configuration for $REPO"
+            cvmfs_server rmfs -f -p $REPO
+        fi
+
+        echo "Adding repo $REPO"
+        if [ -d /srv/cvmfs/$REPO ]; then
+            if ! cvmfs_server import -o cvmfspub $REPO; then
                 continue
             fi
-            ADDEDONE=true
+        elif ! cvmfs_server mkfs -o cvmfspub -G '1 day ago' -z $REPO; then
+            continue
         fi
+        touch /srv/cvmfs/$REPO/.cvmfs_master_replica
+        ADDEDONE=true
         SERVERCONF=/etc/cvmfs/repositories.d/$REPO/server.conf
         for OPT in  CVMFS_IGNORE_XDIR_HARDLINKS=true \
                     CVMFS_GENERATE_LEGACY_BULK_CHUNKS=false \
@@ -51,25 +137,20 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
                 cvmfs_server publish $REPO
             fi
         fi
-    elif [ ! -d /srv/cvmfs/$REPO ]; then
-        PUB=/etc/cvmfs/keys/$REPO.pub
-        if [ ! -f $PUB ]; then
-            DOMAIN="`echo $REPO|cut -d. -f2-`"
-            PUB=/etc/cvmfs/keys/$DOMAIN.pub
-            if [ ! -f $PUB ]; then
-                PUB=/etc/cvmfs/keys/$DOMAIN
-                if [ ! -d $PUB ]; then
-                    echo "No key found for $REPO"
-                    continue
-                fi
-            fi
+    fi
+
+    if [ ! -f /srv/cvmfs/$REPO/.htaccess ]; then
+        # set up so the other host can replicate from here
+        touch /srv/cvmfs/$REPO/.cvmfs_master_replica
+        (echo "Order deny, allow"
+        echo "Deny from all"
+        echo "Allow from 127.0.0.1"
+        echo "Allow from $MYHOSTLONG"
+        if [ -n "$OTHERHOST" ]; then
+            # This is only used for re-installs
+            echo "Allow from $OTHERHOST"
         fi
-        ADDEDONE=true
-        if ! cvmfs_server add-replica -o cvmfspub http://$HOST/cvmfs/$REPO $PUB; then
-            echo "Failed to replicate $REPO from $HOST with key $PUB"
-        elif ! cvmfs_server snapshot $REPO; then
-            echo "Failed to make initial snapshot of $REPO from $HOST"
-        fi
+        ) >/srv/cvmfs/$REPO/.htaccess
     fi
 done
 
