@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.5
+Version: 1.6
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -104,6 +104,9 @@ done
 
 
 %changelog
+* Wed Jul 24 2019 Dave Dykstra <dwd@fnal.gov> 1.6-1
+- Fix a few bugs with the new auto-recovery feature.
+
 * Wed Jul 24 2019 Dave Dykstra <dwd@fnal.gov> 1.5-1
 - When creating repositories, attempt first to re-use old data or to 
   download it from a companion server.   Requires the repository keys
