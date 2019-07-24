@@ -84,6 +84,12 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
         if ! $MYREPO; then
             continue
         fi
+        # make sure that the repo really doesn't exist on the other host
+        #  so as to not overwrite it if it failed for another reason
+        if curl -sf http://$REPHOST/cvmfs/$REPO/.cvmfswhitelist >/dev/null; then
+            echo "Source repo does appear to exist on $REPHOST, so skipping"
+            continue
+        fi
     fi
     if [ -d /srv/cvmfs/.$REPO.SAV ]; then
         echo "Restoring /srv/cvmfs/$REPO from /srv/cvfs/.$REPO.SAV"
