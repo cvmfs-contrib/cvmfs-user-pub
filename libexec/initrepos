@@ -55,16 +55,20 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
     DOMAIN="`echo $REPO|cut -d. -f2-`"
     if [ ! -f $REPOPUB ]; then
         REPOPUB=""
-    else
-        REPOPUB="$REPOPUB:"
     fi
     PUB=/etc/cvmfs/keys/$DOMAIN.pub
     if [ ! -f $PUB ]; then
         PUB=/etc/cvmfs/keys/$DOMAIN/$DOMAIN.pub
-        if [ ! -f $PUB ] && [ -z "$REPOPUB" ]; then
-            echo "No key found for $REPO"
-            continue
+        if [ ! -f $PUB ]; then
+            if [ -z "$REPOPUB" ]; then
+                echo "No key found for $REPO"
+                continue
+            fi
+            PUB=""
         fi
+    fi
+    if [ -n "$REPOPUB" ] && [ -n "$PUB" ]; then
+        PUB=":$PUB"
     fi
     PUB="$REPOPUB$PUB"
     ADDEDONE=true
