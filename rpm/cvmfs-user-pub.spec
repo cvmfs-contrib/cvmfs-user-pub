@@ -1,8 +1,8 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.4
+Version: 1.5
 # The release_prefix macro is used in the OBS prjconf, don't change its name
-%define release_prefix 3
+%define release_prefix 1
 Release: %{release_prefix}%{?dist}
 BuildArch: noarch
 Group: Applications/System
@@ -104,6 +104,13 @@ done
 
 
 %changelog
+* Wed Jul 24 2019 Dave Dykstra <dwd@fnal.gov> 1.5-1
+- When creating repositories, attempt first to re-use old data or to 
+  download it from a companion server.   Requires the repository keys
+  to be preserved or to be restored from backup in order to work
+  without manual intervention.
+- Respond negatively to the ping api if there are no hostrepos configured.
+
 * Wed Jul 10 2019 Dave Dykstra <dwd@fnal.gov> 1.4-3
 - Make buildable by OBS
 
