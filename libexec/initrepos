@@ -146,7 +146,7 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
     if [ ! -f /srv/cvmfs/$REPO/.htaccess ]; then
         # set up so the other host can replicate from here
         touch /srv/cvmfs/$REPO/.cvmfs_master_replica
-        (echo "Order deny, allow"
+        (echo "Order deny,allow"
         echo "Deny from all"
         echo "Allow from 127.0.0.1"
         echo "Allow from $MYHOSTLONG"
