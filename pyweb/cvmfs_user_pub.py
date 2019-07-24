@@ -351,7 +351,7 @@ def dispatch(environ, start_response):
     conflock.release()
 
     if 'PATH_INFO' not in environ:
-        return bad_request(start_response, ip, cn, 'No PATH_INFO')
+        return bad_request(start_response, ip, '-', 'No PATH_INFO')
     pathinfo = environ['PATH_INFO']
 
     parameters = {}
@@ -373,6 +373,8 @@ def dispatch(environ, start_response):
         return good_request(start_response, body)
 
     if pathinfo == '/ping':
+        if 'hostrepo' not in conf:
+            return bad_request(start_response, ip, '-', 'not configured')
         return good_request(start_response, 'OK\n')
 
     if 'SSL_CLIENT_S_DN' not in environ:
