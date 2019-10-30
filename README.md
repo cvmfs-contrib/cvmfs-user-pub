@@ -9,3 +9,7 @@ The API is described in the comments of
 [pyweb/cvmfs_user_pub.py](pyweb/cvmfs_user_pub.py)
 and the configuration is in the comments of
 [etc/cvmfs-user-pub.conf](etc/cvmfs-user-pub.conf).
+
+In order to be able to reuse tarballs where input files have not
+changed, and have it use a consistent CID hash, either set `GZIP=-n` in
+the environment of `tar` or pipe to `gzip -n` instead of using `tar -z`.
