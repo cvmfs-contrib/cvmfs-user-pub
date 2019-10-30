@@ -1,6 +1,8 @@
 # cvmfs-user-pub
 Service for publishing user code tarballs in cvmfs repositories
 
+Pre-built rpms available in [cvmfs-contrib](https://cvmfs-contrib.github.io/).
+
 For a description of the service, see my
 [talk](https://indico.cern.ch/event/757415/contributions/3416919/attachments/1854267/3045098/CVMFSWorkshop20190603.pdf)
 from the 2019 CernVM Workshop.
