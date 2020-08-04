@@ -31,6 +31,7 @@
 
 import os, threading, time, datetime
 import Queue, socket, subprocess, select
+import fcntl
 import urlparse, urllib
 import shutil, re
 
@@ -173,6 +174,9 @@ def runthreadcmd(cmd, msg):
     threadmsg(cmd)
     p = subprocess.Popen( ('/bin/bash', '-c', cmd), bufsize=1, 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for fd in (p.stdout, p.stderr):
+	flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+	fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
     # the following logic is from
     #  https://stackoverflow.com/questions/23677526/checking-to-see-if-there-is-more-data-to-read-from-a-file-descriptor-using-pytho
@@ -180,9 +184,11 @@ def runthreadcmd(cmd, msg):
         ready, _, _ = select.select((p.stdout, p.stderr), (), ())
         for fd in (p.stdout, p.stderr):
             if fd in ready:
-                line = fd.readline()
-                if line:
-                    threadmsg(line)
+                data = fd.read()  # non-blocking
+                if data:
+		    lines = data.split('\n')
+		    for line in lines:
+			threadmsg(line)
                 elif p.returncode is not None:
                     ready = filter(lambda x: x is not fd, ready)
         if p.poll() is not None and not ready:
