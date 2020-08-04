@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.6
+Version: 1.7
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -13,9 +13,10 @@ Source0: https://github.com/DrDaveD/%{name}/releases/download/%{version}/%{name}
 Requires: httpd
 Requires: mod_wsgi
 Requires: mod_ssl
-# 2.5.1 is needed for the updated geoip DB for add-replica
-Requires: cvmfs-server >= 2.5.1
-Requires: cvmfs
+# 2.7.0 is needed for setting geoip DB to NONE for add-replica
+Requires: cvmfs-server >= 2.7.0
+# require similar cvmfs version also for consistency
+Requires: cvmfs >= 2.7.0
 
 %description
 Accepts tarballs from authenticated users and publishes them in a cvmfs
@@ -76,6 +77,12 @@ if ! grep ^OPENSSL_ALLOW_PROXY_CERTS=1 /etc/sysconfig/httpd >/dev/null 2>&1; the
     echo 'OPENSSL_ALLOW_PROXY_CERTS=1') >>/etc/sysconfig/httpd
 fi
 
+if ! grep ^CVMFS_GEO /etc/cvmfs/server.local >/dev/null 2>&1; then
+    (echo
+    echo '# added by cvmfs-user-pub post install'
+    echo 'CVMFS_GEO_DB_FILE=NONE') >>/etc/cvmfs/server.local
+fi
+
 for service in cvmfs-user-pub httpd; do
     if ! systemctl is-enabled --quiet $service; then
         systemctl enable $service
@@ -104,6 +111,13 @@ done
 
 
 %changelog
+* Tue Aug 4 2020 Dave Dykstra <dwd@fnal.gov> 1.7-1
+- Make reads from subcommands non-blocking and not require an end of line.
+  This fixes a problem with publishes getting stuck.
+- Require at least cvmfs-server-2.7.0 and set it up to ignore the geo DB
+  file for add-replica and snapshots.
+- Require the cvmfs version to be a similar version, for consistency.
+
 * Wed Jul 24 2019 Dave Dykstra <dwd@fnal.gov> 1.6-1
 - Fix a few bugs with the new auto-recovery feature.
 
