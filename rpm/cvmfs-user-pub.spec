@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.7
+Version: 1.8
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -111,6 +111,21 @@ done
 
 
 %changelog
+* Mon Oct 5 2020 Dave Dykstra <dwd@fnal.gov> 1.8-1
+- Run garbage collection on each repo at service start time, to workaround
+  bug reported in https://sft.its.cern.ch/jira/browse/CVM-1919
+- Have web service report a "Service not running" error when the
+  cvmfs-user-pub status does not report running.  Checks at most once
+  every 5 seconds.
+- Make a shutdown web service api, callable only from localhost, and call
+  it from systemctl stop.  Makes sure all publication is completed before
+  returning, for a clean shutdown.  Does not cover garbage collection
+  which is presumed to be interruptible.
+- Change "/etc/init.d/cvmfs-user-pub status" to make sure all /cvmfs2
+  repositories are mounted before declaring the service to be running.
+- Removing leading zero from current hour in gcsnapshots, to avoid problem
+  with bash treating 08 and 09 as illegal octal numbers.
+
 * Tue Aug 4 2020 Dave Dykstra <dwd@fnal.gov> 1.7-1
 - Make reads from subcommands non-blocking and not require an end of line.
   This fixes a problem with publishes getting stuck.
