@@ -16,6 +16,9 @@ MYHOSTLONG="`hostname`"
 MYHOSTSHORT="`hostname -s`"
 REPONUM=0
 THISHOUR="`date +%H`"
+# remove leading zero if there is one, otherwise bash treats as octal
+#  and complains about hour 08 and 09
+THISHOUR="${THISHOUR/#0/}"
 for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
     let REPONUM+=1
     if (( $THISHOUR != ($GCSTARTHOUR - 1 + $REPONUM) % 24 )); then
