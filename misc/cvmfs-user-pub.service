@@ -8,6 +8,9 @@ RemainAfterExit=yes
 ExecStart=/etc/init.d/cvmfs-user-pub start
 ExecStop=/etc/init.d/cvmfs-user-pub stop
 # Haven't been able to get ExecReload to work properly, leave it out
+# Need this while running garbage collection at startup time due to
+#  bug in https://sft.its.cern.ch/jira/browse/CVM-1919
+TimeoutSec=1800
 
 [Install]
 WantedBy=multi-user.target
