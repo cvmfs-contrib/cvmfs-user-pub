@@ -47,6 +47,9 @@ userpubconf = {}
 confupdatetime = 0
 userpubconfmodtime = 0
 alloweddnsmodtime = 0
+servicecachetime = 5 # 5 seconds
+servicestatustime = 0
+servicerunning = False
 conflock = threading.Lock()
 pubqueue = Queue.Queue()
 
@@ -226,6 +229,7 @@ def publishloop(repo, reponum, conf):
                 cidpath = os.path.join(queuedir,cid)
                 threadmsg('removing ' + cidpath)
                 os.remove(cidpath)
+            pubqueue.task_done()
 
         thishour = datetime.datetime.now().hour
         if thishour != (gcstarthour - 1 + reponum) % 24:
@@ -291,10 +295,40 @@ def repocidpath(repo, cid):
 def dispatch(environ, start_response):
     if 'REMOTE_ADDR' not in environ:
         logmsg('-', '-', 'No REMOTE_ADDR')
-        return bad_request(start_response, 'wpad-dispatch', '-', 'REMOTE_ADDR not set')
+        return bad_request(start_response, 'cvmfs-user-pub-dispatch', '-', 'REMOTE_ADDR not set')
     ip = environ['REMOTE_ADDR']
 
     now = int(time.time())
+
+    global servicerunning
+    global servicestatustime
+    if (now - servicestatustime) > servicecachetime:
+        servicestatustime = now
+        # check if the service is running
+        # can't depend on an api request, because httpd might be reloaded
+        p = subprocess.Popen("systemctl is-active --quiet cvmfs-user-pub", shell=True)
+        if p.wait() == 0:
+            servicerunning = True
+        else:
+            servicerunning = False
+
+    if not servicerunning:
+        return bad_request(start_response, ip, '-', 'Service not running')
+
+    if 'PATH_INFO' not in environ:
+        return bad_request(start_response, ip, '-', 'No PATH_INFO')
+    pathinfo = environ['PATH_INFO']
+
+    parameters = {}
+    if 'QUERY_STRING' in environ:
+        parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
+
+    if ip == '127.0.0.1' and pathinfo == '/shutdown':
+        servicerunning = False
+        # wait for publication processes to finish
+        pubqueue.join()
+        return good_request(start_response, 'OK\n')
+
     conflock.acquire()
     global confupdatetime
     global userpubconf
@@ -355,14 +389,6 @@ def dispatch(environ, start_response):
     conf = userpubconf
     dns = alloweddns
     conflock.release()
-
-    if 'PATH_INFO' not in environ:
-        return bad_request(start_response, ip, '-', 'No PATH_INFO')
-    pathinfo = environ['PATH_INFO']
-
-    parameters = {}
-    if 'QUERY_STRING' in environ:
-        parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
 
     if pathinfo == '/config':
         logmsg(ip, '-', 'Returning config')
