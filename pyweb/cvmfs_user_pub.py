@@ -292,6 +292,15 @@ def cidinrepo(cid, conf):
 def repocidpath(repo, cid):
     return '/cvmfs/' + repo + '/' + prefix + '/' + cid
 
+def queueorstamp(ip, cn, cid, conf):
+    inrepo = cidinrepo(cid, conf)
+    if inrepo is not None:
+        logmsg(ip, cn, cid + ' already present in ' + inrepo)
+        pubqueue.put([cid, cn, conf, 'ts,queued'])
+        return 'PRESENT:' + repocidpath(inrepo, cid) + '\n'
+    pubqueue.put([cid, cn, conf, 'queued'])
+    return 'OK\n'
+
 def dispatch(environ, start_response):
     if 'REMOTE_ADDR' not in environ:
         logmsg('-', '-', 'No REMOTE_ADDR')
@@ -299,35 +308,6 @@ def dispatch(environ, start_response):
     ip = environ['REMOTE_ADDR']
 
     now = int(time.time())
-
-    global servicerunning
-    global servicestatustime
-    if (now - servicestatustime) > servicecachetime:
-        servicestatustime = now
-        # check if the service is running
-        # can't depend on an api request, because httpd might be reloaded
-        p = subprocess.Popen("systemctl is-active --quiet cvmfs-user-pub", shell=True)
-        if p.wait() == 0:
-            servicerunning = True
-        else:
-            servicerunning = False
-
-    if not servicerunning:
-        return bad_request(start_response, ip, '-', 'Service not running')
-
-    if 'PATH_INFO' not in environ:
-        return bad_request(start_response, ip, '-', 'No PATH_INFO')
-    pathinfo = environ['PATH_INFO']
-
-    parameters = {}
-    if 'QUERY_STRING' in environ:
-        parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
-
-    if ip == '127.0.0.1' and pathinfo == '/shutdown':
-        servicerunning = False
-        # wait for publication processes to finish
-        pubqueue.join()
-        return good_request(start_response, 'OK\n')
 
     conflock.acquire()
     global confupdatetime
@@ -389,6 +369,71 @@ def dispatch(environ, start_response):
     conf = userpubconf
     dns = alloweddns
     conflock.release()
+
+    if 'PATH_INFO' not in environ:
+        return bad_request(start_response, ip, '-', 'No PATH_INFO')
+    pathinfo = environ['PATH_INFO']
+
+    parameters = {}
+    if 'QUERY_STRING' in environ:
+        parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
+
+    global servicerunning
+    global servicestatustime
+
+    startup = False
+    if ip == "127.0.0.1":
+        if pathinfo == '/startup':
+            # The cvmfs-user-pub service is about to become active
+            startup = True
+        elif pathinfo == '/shutdown':
+            if servicerunning:
+                servicerunning = False
+                logmsg(ip, '-', 'Service shutting down')
+                # wait for publication processes to finish
+                pubqueue.join()
+            return good_request(start_response, 'OK\n')
+
+    conflock.acquire()
+    if startup or (now - servicestatustime) > servicecachetime:
+        servicestatustime = now
+        conflock.release()
+        if startup:
+            isactivecode = 0
+        else:
+            # check if the service is running
+            # can't depend on an api request, because httpd might be reloaded
+            cmd = "systemctl is-active --quiet cvmfs-user-pub"
+            p = subprocess.Popen(cmd, shell=True)
+            isactivecode = p.wait()
+        if isactivecode == 0:
+            if not servicerunning:
+                servicerunning = True
+                logmsg(ip, '-', 'Service is now up')
+                # re-queue any leftover tarfiles
+                for root, dirs, files in os.walk(queuedir):
+                    for file in files:
+                        path = root + '/' + file
+                        if file.endswith('.tmp'):
+                            logmsg(ip, '-', 'cleaning out ' + path)
+                            os.remove(path)
+                        else:
+                            cid = path[len(queuedir)+1:]
+                            msg = queueorstamp(ip, 'Requeue', cid, conf)
+                            logmsg(ip, '-', 'Requeued ' + cid + ': ' + msg)
+        else:
+            if servicerunning:
+                # this was an unclean shutdown, shouldn't happen
+                servicerunning = False
+                logmsg(ip, '-', 'NOTE: unclean shutdown detected')
+    else:
+        conflock.release()
+
+    if not servicerunning:
+        return bad_request(start_response, ip, '-', 'Service not running')
+
+    if startup:
+        return good_request(start_response, 'OK\n')
 
     if pathinfo == '/config':
         logmsg(ip, '-', 'Returning config')
@@ -493,7 +538,7 @@ def dispatch(environ, start_response):
             contentlength = environ.get('CONTENT_LENGTH','0')
             length = int(contentlength)
             input = environ['wsgi.input']
-            with open(cidpath, 'w') as output:
+            with open(cidpath + '.tmp', 'w') as output:
                 while length > 0:
                     bufsize = 16384
                     if bufsize > length:
@@ -501,22 +546,16 @@ def dispatch(environ, start_response):
                     buf = input.read(bufsize)
                     output.write(buf)
                     length -= len(buf)
+            os.rename(cidpath + '.tmp', cidpath)
             logmsg(ip, cn, 'wrote ' + contentlength + ' bytes to ' + cidpath)
         except Exception, e:
             logmsg(ip, cn, 'error getting publish data: ' + str(e))
             try:
-                os.remove(cidpath)
+                os.remove(cidpath + '.tmp')
             except OSError:
                 pass
             return bad_request(start_response, ip, cn, 'error getting publish data')
-        inrepo = cidinrepo(cid, conf)
-        if inrepo is not None:
-            logmsg(ip, cn, cid + ' already present in ' + inrepo)
-            pubqueue.put([cid, cn, conf, 'ts,queued'])
-            return good_request(start_response,
-                'PRESENT:' + repocidpath(inrepo, cid) + '\n')
-        pubqueue.put([cid, cn, conf, 'queued'])
-        return good_request(start_response, 'OK\n')
+        return good_request(start_response, queueorstamp(ip, cn, cid, conf))
 
     logmsg(ip, cn, 'Unrecognized api ' + pathinfo)
     return error_request(start_response, '404 Not found', 'Unrecognized api')

@@ -1,0 +1,2 @@
+#!/bin/sh
+curl -s http://localhost/pubapi/ping || true
