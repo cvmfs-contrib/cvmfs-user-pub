@@ -47,6 +47,7 @@ install -p -m 444 pyweb/* $RPM_BUILD_ROOT/usr/share/%{name}/pyweb
 mkdir -p $RPM_BUILD_ROOT/usr/libexec/%{name}
 install -p -m 555 libexec/gcsnapshots $RPM_BUILD_ROOT/usr/libexec/%{name}/gcsnapshots
 install -p -m 555 libexec/initrepos $RPM_BUILD_ROOT/usr/libexec/%{name}/initrepos
+install -p -m 555 libexec/ping $RPM_BUILD_ROOT/usr/libexec/%{name}/ping
 install -p -m 555 libexec/publish $RPM_BUILD_ROOT/usr/libexec/%{name}/publish
 install -p -m 555 libexec/snapshots $RPM_BUILD_ROOT/usr/libexec/%{name}/snapshots
 
@@ -117,10 +118,16 @@ done
 - Have web service report a "Service not running" error when the
   cvmfs-user-pub status does not report running.  Checks at most once
   every 5 seconds.
+- When service is restarted, re-qeueue any tarfile that was waiting in
+  the queuedir to be published.
 - Make a shutdown web service api, callable only from localhost, and call
   it from systemctl stop.  Makes sure all publication is completed before
   returning, for a clean shutdown.  Does not cover garbage collection
   which is presumed to be interruptible.
+- Make a startup web service api, callable only from localhost, and call
+  it from systemctl start or restart to initialize the service.
+- Ping the service whenever httpd is started or reloaded, to initialize
+  the service.
 - Change "/etc/init.d/cvmfs-user-pub status" to make sure all /cvmfs2
   repositories are mounted before declaring the service to be running.
 - Removing leading zero from current hour in gcsnapshots, to avoid problem
