@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.8
+Version: 1.9
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -17,6 +17,9 @@ Requires: mod_ssl
 Requires: cvmfs-server >= 2.7.0
 # require similar cvmfs version also for consistency
 Requires: cvmfs >= 2.7.0
+%if 0%{?el8}
+Requires: python2
+%endif
 
 %description
 Accepts tarballs from authenticated users and publishes them in a cvmfs
@@ -112,6 +115,9 @@ done
 
 
 %changelog
+* Tue Oct 6 2020 Dave Dykstra <dwd@fnal.gov> 1.9-1
+- Explicitly choose python2 for el8
+
 * Mon Oct 5 2020 Dave Dykstra <dwd@fnal.gov> 1.8-1
 - Run garbage collection on each repo at service start time, to workaround
   bug reported in https://sft.its.cern.ch/jira/browse/CVM-1919
