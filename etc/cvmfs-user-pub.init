@@ -80,3 +80,8 @@ if [ "$OP" = start ]; then
     # this needs to be done at boot time
     cvmfs_server mount -a
 fi
+
+if [ "$OP" = start ] || [ "$OP" = restart ]; then
+    # kicks off initialization
+    curl -s http://localhost/pubapi/startup
+fi
