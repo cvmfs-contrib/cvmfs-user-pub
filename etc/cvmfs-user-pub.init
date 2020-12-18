@@ -31,6 +31,11 @@ if [ "$OP" = reload ]; then
     OP=restart
 fi
 
+if [ "$OP" = start ]; then
+    # this needs to be done at boot time
+    cvmfs_server mount -a
+fi
+
 for REPO in $REPOS; do
     if [ "$OP" = stop ] || [ "$OP" = restart ]; then
         # shut down the web service
@@ -75,11 +80,6 @@ xEOFx
     fi
 
 done
-
-if [ "$OP" = start ]; then
-    # this needs to be done at boot time
-    cvmfs_server mount -a
-fi
 
 if [ "$OP" = start ] || [ "$OP" = restart ]; then
     # kicks off initialization
