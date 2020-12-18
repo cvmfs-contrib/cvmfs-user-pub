@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.9
+Version: 1.10
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -87,7 +87,7 @@ if ! grep ^CVMFS_GEO /etc/cvmfs/server.local >/dev/null 2>&1; then
     echo 'CVMFS_GEO_DB_FILE=NONE') >>/etc/cvmfs/server.local
 fi
 
-for service in cvmfs-user-pub httpd; do
+for service in httpd cvmfs-user-pub; do
     if ! systemctl is-enabled --quiet $service; then
         systemctl enable $service
     fi
@@ -95,10 +95,12 @@ for service in cvmfs-user-pub httpd; do
         systemctl start $service
     elif [ $service = httpd ]; then
         systemctl reload $service
+        /usr/libexec/%{name}/ping
     fi
 done
 
 /usr/libexec/%{name}/initrepos
+
 
 %files
 %config(noreplace) /etc/%{name}.conf
@@ -115,6 +117,14 @@ done
 
 
 %changelog
+* Fri Dec 18 2020 Dave Dykstra <dwd@fnal.gov> 1.10-1
+- Change the order of initializing services during rpm install to have
+  httpd before cvmfs-user-pub
+- Ping the web service after an rpm install does a reload of httpd to
+  kick off reinitialization if everything else is running
+- Move the cvmfs_server mount -a at cvmfs-user-pub service start time
+  to before the starting garbage collection.
+
 * Tue Oct 6 2020 Dave Dykstra <dwd@fnal.gov> 1.9-1
 - Explicitly choose python2 for el8
 
