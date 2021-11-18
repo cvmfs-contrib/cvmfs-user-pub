@@ -267,6 +267,8 @@ def publishloop(repo, reponum, conf):
             cmd = "cvmfs_server transaction '" + repo + "'"
             if runthreadcmd(cmd, 'start transaction ' + repo) == 0:
                 for dir in dirdeletelist:
+                    cmd = "find " + dir + " -type d ! -perm -0700 -print0|xargs -0rt chmod u+rwx"
+                    runthreadcmd(cmd, 'checking perms on ' + dir)
                     threadmsg('removing ' + dir)
                     shutil.rmtree(dir)
                 for file in filedeletelist:

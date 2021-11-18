@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.10
+Version: 1.11
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -117,6 +117,9 @@ done
 
 
 %changelog
+* Thu Nov 18 2021 Dave Dykstra <dwd@fnal.gov> 1.11-1
+- Before deleting a tarball, make sure all the directories are writable
+
 * Fri Dec 18 2020 Dave Dykstra <dwd@fnal.gov> 1.10-1
 - Change the order of initializing services during rpm install to have
   httpd before cvmfs-user-pub
