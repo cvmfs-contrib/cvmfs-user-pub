@@ -34,6 +34,7 @@ import Queue, socket, subprocess, select
 import fcntl
 import urlparse, urllib
 import shutil, re
+import scitokens
 
 confcachetime = 300  # 5 minutes
 userpubconffile = '/etc/cvmfs-user-pub.conf'
@@ -43,10 +44,14 @@ prefix = 'sw'
 gcstarthour = 3
 maxdays = 30
 alloweddns = set()
+issuers = set()
+audiences = set()
+
 userpubconf = {}
 confupdatetime = 0
 userpubconfmodtime = 0
 alloweddnsmodtime = 0
+issuersmodtime = 0
 servicecachetime = 5 # 5 seconds
 servicestatustime = 0
 servicerunning = False
@@ -130,6 +135,30 @@ def parse_alloweddns():
         return alloweddns
 
     return newdns
+
+def parse_issuers(issuersfile):
+    global issuersmodtime
+    newissuers = set()
+    savemodtime = issuersmodtime
+    try:
+        modtime = os.stat(issuersfile).st_mtime
+        if modtime == issuersmodtime:
+            # no change
+            return issuers
+        issuersmodtime = modtime
+        logmsg('-', '-', 'reading ' + issuersfile)
+        for line in open(issuersfile, 'r').read().split('\n'):
+            # take the first whitespace-separated word
+            if len(line) == 0 or line[0] == '#':
+                continue
+            parts = line.split()
+            newissuers.add(parts[0])
+    except Exception, e:
+        logmsg('-', '-', 'error reading ' + issuersfile + ', continuing: ' + str(e))
+        issuersmodtime = savemodtime
+        return issuers
+
+    return newissuers
 
 # Generate all cids in the tree below path.  Cids can have zero or one
 #  slashes.  Assume they have zero slashes if the first subdirectory found
@@ -322,6 +351,14 @@ def dispatch(environ, start_response):
             conflock.release()
         newconf = parse_conf()
         newdns = parse_alloweddns()
+        newissuers = set()
+        if 'issuersfile' in newconf:
+            newissuers = parse_issuers(newconf['issuersfile'][0])
+
+        global audiences
+        if 'audience' in newconf:
+            for a in newconf['audience']:
+                audiences.add(a)
 
         # things to do when config file has changed
         global queuedir
@@ -368,6 +405,8 @@ def dispatch(environ, start_response):
         userpubconf = newconf
         global alloweddns
         alloweddns = newdns
+        global issuers
+        issuers = newissuers
     conf = userpubconf
     dns = alloweddns
     conflock.release()
@@ -456,10 +495,40 @@ def dispatch(environ, start_response):
             return bad_request(start_response, ip, '-', 'not configured')
         return good_request(start_response, 'OK\n')
 
-    if 'SSL_CLIENT_S_DN' not in environ:
+    if 'HTTP_AUTHORIZATION' in environ:
+        try:
+            header = environ['HTTP_AUTHORIZATION']
+            scheme, tokenstr = header.split(' ', 1)
+        except Exception, e:
+            logmsg(ip, '-', 'Failure parsing Authorization header ' + header + ': ' + str(e))
+            return error_request(start_response, '403 Access denied', 'Failure to parse Authorization')
+        if scheme.lower() != 'bearer':
+            logmsg(ip, '-', 'Unrecognized authorization scheme ' + scheme)
+            return error_request(start_response, '403 Access denied', 'Unrecognized authorization scheme')
+        try:
+            audience = ["https://wlcg.cern.ch/jwt/v1/any"]
+            if len(audiences) == 0:
+                audience.append("https://"+socket.gethostname())
+            else:
+                for a in audiences:
+                    audience.append(a)
+            token = scitokens.SciToken.deserialize(tokenstr.strip(), audience=audience)
+            issuer = token['iss']
+            if issuer not in issuers:
+                logmsg(ip, '-', 'Token issuer ' + issuer + ' not in the list of trusted issuers')
+                return error_request(start_response, '403 Access denied', 'Untrusted token issuer')
+            scopes = token['scope'].split(' ')
+            if 'compute.create' not in scopes:
+                logmsg(ip, '-', 'compute.create scope missing from token')
+                return error_request(start_response, '403 Access denied', 'compute.create scope missing from token')
+            cn = token['sub']
+        except Exception, e:
+            logmsg(ip, '-', 'error decoding token: ' + str(e))
+            return error_request(start_response, '403 Access denied', 'Error decoding token: ' + str(e))
+    elif 'SSL_CLIENT_S_DN' not in environ:
         if ip != '127.0.0.1':
-            logmsg(ip, '-', 'No client cert, access denied')
-            return error_request(start_response, '403 Access denied', 'Client cert required')
+            logmsg(ip, '-', 'No token or client cert, access denied')
+            return error_request(start_response, '403 Access denied', 'Token or client cert required')
         cn = 'localhost'
     else:
         dn = environ['SSL_CLIENT_S_DN']

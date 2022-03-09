@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.11
+Version: 1.12
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -8,7 +8,7 @@ BuildArch: noarch
 Group: Applications/System
 License: BSD
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-Source0: https://github.com/DrDaveD/%{name}/releases/download/%{version}/%{name}-%{version}.tar.gz
+Source0: https://github.com/cvmfs-contrib/%{name}/releases/download/%{version}/%{name}-%{version}.tar.gz
 
 Requires: httpd
 Requires: mod_wsgi
@@ -19,6 +19,11 @@ Requires: cvmfs-server >= 2.7.0
 Requires: cvmfs >= 2.7.0
 %if 0%{?el8}
 Requires: python2
+%endif
+%if 0%{?el7}
+# only require on el7 because el8 only has python3-scitokens
+# when el8 needs to be supported, convert everything to python3
+Requires: python2-scitokens
 %endif
 
 %description
@@ -117,6 +122,11 @@ done
 
 
 %changelog
+* Wed Mar 9 2022 Dave Dykstra <dwd@fnal.gov> 1.12-1
+- Add support for token authorization, with additional configuration 
+  variables "issuersfile" and "audience".  Tokens are required to have
+  the "compute.create" scope.
+
 * Thu Nov 18 2021 Dave Dykstra <dwd@fnal.gov> 1.11-1
 - Before deleting a tarball, make sure all the directories are writable
 
