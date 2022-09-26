@@ -116,13 +116,15 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
             if ! cvmfs_server import -o cvmfspub $REPO; then
                 continue
             fi
-        elif ! cvmfs_server mkfs -o cvmfspub -G '1 day ago' -z $REPO; then
+        elif ! cvmfs_server mkfs -o cvmfspub $REPO; then
             continue
         fi
         touch /srv/cvmfs/$REPO/.cvmfs_master_replica
         ADDEDONE=true
         SERVERCONF=/etc/cvmfs/repositories.d/$REPO/server.conf
-        for OPT in  CVMFS_IGNORE_XDIR_HARDLINKS=true \
+        for OPT in  CVMFS_GARBAGE_COLLECTION=true \
+                    'CVMFS_AUTO_TAG_TIMESPAN="1 day ago"' \
+                    CVMFS_IGNORE_XDIR_HARDLINKS=true \
                     CVMFS_GENERATE_LEGACY_BULK_CHUNKS=false \
                     CVMFS_AUTOCATALOGS=true \
                     CVMFS_ENFORCE_LIMITS=true \
@@ -135,18 +137,24 @@ for HOSTREPO in `sed -n 's/^hostrepo\s*//p' /etc/cvmfs-user-pub.conf`; do
                 echo "$OPT" >>$SERVERCONF
             fi
         done
-        if [ ! -f /cvmfs/$REPO/.cvmfsdirtab ]; then
-            if ! cvmfs_server transaction $REPO; then
+        if ! cvmfs_server transaction $REPO; then
+            if [ ! -f /cvmfs/$REPO/.cvmfsdirtab ]; then
                 echo "Cannot start transaction, skipping making .cvmfsdirtab"
             else
+                echo "Cannot start transaction, skipping initializing gc-ability"
+            fi
+        else
+            if [ ! -f /cvmfs/$REPO/.cvmfsdirtab ]; then
                 (echo "/*";
                 echo "/$PREFIX/*";
                 echo "/ts/*") >/cvmfs/$REPO/.cvmfsdirtab
                 chown cvmfspub /cvmfs/$REPO/.cvmfsdirtab
                 rm -f /cvmfs/$REPO/new_repository
-                cvmfs_server publish $REPO
             fi
+            cvmfs_server publish $REPO
         fi
+        # Fix common problem seen with reflog
+        cvmfs_server check -r $REPO
     fi
 
     if [ ! -f /srv/cvmfs/$REPO/.htaccess ]; then
