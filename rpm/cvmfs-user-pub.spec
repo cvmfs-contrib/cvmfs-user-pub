@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.12
+Version: 1.13
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -122,6 +122,12 @@ done
 
 
 %changelog
+* Mon Sep 26 2022 Dave Dykstra <dwd@fnal.gov> 1.13-1
+- Enable garbage collection and set an auto tag timespan when re-creating
+  repositories with cvmfs_server import in addition to when creating
+  them from scratch.
+- Always run cvmfs_server check -r when initializing a repo.
+
 * Wed Mar 9 2022 Dave Dykstra <dwd@fnal.gov> 1.12-1
 - Add support for token authorization, with additional configuration 
   variables "issuersfile" and "audience".  Tokens are required to have
