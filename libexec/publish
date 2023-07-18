@@ -7,7 +7,7 @@
 REPO="$1"
 QUEUEDIR="$2"
 PREFIX="$3"
-CID="$4"
+CID="$4" # may be comma-separated list when touching
 PUBLISHER="$5"
 set -e
 echo "starting transaction for publish in $REPO"
@@ -16,12 +16,16 @@ if ! cvmfs_server transaction $REPO; then
     cvmfs_server abort -f $REPO
     cvmfs_server transaction $REPO
 fi
-SUBPATH="/cvmfs/$REPO/$PREFIX/$CID"
 if [ "$PREFIX" = "ts" ]; then
-    echo "touching $SUBPATH"
-    mkdir -p "${SUBPATH%/*}"
-    echo "$PUBLISHER" > $SUBPATH
+    IFS="," read -r -a CIDS <<< "$CID"
+    for TS in "${CIDS[@]}"; do
+        SUBPATH="/cvmfs/$REPO/$PREFIX/$TS"
+        echo "touching $SUBPATH"
+        mkdir -p "${SUBPATH%/*}"
+        echo "$PUBLISHER" > $SUBPATH
+    done
 else
+    SUBPATH="/cvmfs/$REPO/$PREFIX/$CID"
     echo "extracting into $SUBPATH"
     mkdir -p "$SUBPATH"
     if ! tar -C "$SUBPATH" -xf "$QUEUEDIR/$CID"; then
@@ -32,6 +36,6 @@ else
     touch $SUBPATH/.cvmfscatalog
     echo "$PUBLISHER" > $SUBPATH/.publisher
 fi
-echo "publishing $SUBPATH"
+echo "publishing $CID at /cvmfs/$REPO/$PREFIX"
 cvmfs_server publish $REPO
 echo "done with $CID"

@@ -46,12 +46,15 @@ for REPO in $REPOS; do
     fi
 
     if [ "$OP" = start ]; then
-        # sometimes a crash corrupts these
-        rm -f /srv/cvmfs/$REPO/.cvmfsreflog /var/spool/cvmfs/$REPO/reflog.chksum
-        cvmfs_server abort -f $REPO || true
-        # need to do a gc in cvmfs-server 2.7.3 to workaround problem in
-        #  https://sft.its.cern.ch/jira/browse/CVM-1919
-        cvmfs_server gc -f $REPO || true
+        RL1=/srv/cvmfs/$REPO/.cvmfsreflog 
+        RL2=/var/spool/cvmfs/$REPO/reflog.chksum 
+        if [ ! -f $RL1 ] || [ ! -f $RL2 ] || \
+            [ "$(cvmfs_publish hash -a sha1 < $RL1)" != "$(< $RL2)" ]; then
+            # sometimes a crash corrupts these
+            rm -f $RL1 $RL2
+            cvmfs_server abort -f $REPO || true
+            cvmfs_server check -r $REPO || true
+        fi
     fi
 
     if [ "$OP" = start ] || [ "$OP" = restart ]; then
