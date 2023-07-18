@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.13
+Version: 1.14
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -14,9 +14,9 @@ Requires: httpd
 Requires: mod_wsgi
 Requires: mod_ssl
 # 2.7.0 is needed for setting geoip DB to NONE for add-replica
-Requires: cvmfs-server >= 2.7.0
+Requires: cvmfs-server >= 2.10.1
 # require similar cvmfs version also for consistency
-Requires: cvmfs >= 2.7.0
+Requires: cvmfs >= 2.10.1
 %if 0%{?el8}
 Requires: python2
 %endif
@@ -122,6 +122,16 @@ done
 
 
 %changelog
+* Tue Jul 18 2023 Dave Dykstra <dwd@fnal.gov> 1.14-1
+- Keep track of all pending timestamp touches in a dictionary and do
+  them all at once, rather than queuing a separate publish for each
+  attempt.  This is to address a situation where there were many
+  duplicate timestamp touches queued.
+- Check to see if reflogs are corrupted before attempting to regenerate
+  them.  Use cvmfs_server check -r instead of gc to regenerate them when
+  needed.
+- Update minimum cvmfs & cvmfs-server to 2.10.1.
+
 * Mon Sep 26 2022 Dave Dykstra <dwd@fnal.gov> 1.13-1
 - Enable garbage collection and set an auto tag timespan when re-creating
   repositories with cvmfs_server import in addition to when creating

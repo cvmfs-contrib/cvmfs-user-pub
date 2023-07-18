@@ -57,6 +57,8 @@ servicestatustime = 0
 servicerunning = False
 conflock = threading.Lock()
 pubqueue = Queue.Queue()
+tslock = threading.Lock()
+tscids = {}
 
 def logmsg(ip, id, msg):
     print '(' + ip + ' ' + id + ') '+ msg
@@ -246,18 +248,37 @@ def publishloop(repo, reponum, conf):
 
         if cid is not None:
             pubdir = prefix
+            cids = []
             if 'ts' in option:
                 # This particular directory name 'ts' (for timestamp)
-                #  tells the publish script to only touch the file
+                #  tells the publish script to only touch the file(s)
                 pubdir = 'ts'
-            # enclose cid in single quotes because it comes from the user
-            cmd = "/usr/libexec/cvmfs-user-pub/publish " + repo + " " + \
-                    queuedir + " " + pubdir + " '" + cid + "' '" + cn + "'"
-            returncode = runthreadcmd(cmd, 'publish ' + cid)
-            if 'queued' in option:
-                cidpath = os.path.join(queuedir,cid)
-                threadmsg('removing ' + cidpath)
-                os.remove(cidpath)
+                # Publish together all timestamps in tscids that aren't
+                # being published by another thread.
+                # That list may be empty if they were already taken care of
+                # by another queued item.
+                tslock.acquire()
+                for tscid in tscids:
+                    if tscids[tscid] == 1:
+                        cids.append(tscid)
+                        # indicate that publish is in progress
+                        tscids[tscid] = 2
+                tslock.release()
+                cid = ','.join(cids)
+            if cid != "":
+                # enclose cid in single quotes because it comes from the user
+                cmd = "/usr/libexec/cvmfs-user-pub/publish " + repo + " " + \
+                        queuedir + " " + pubdir + " '" + cid + "' '" + cn + "'"
+                returncode = runthreadcmd(cmd, 'publish ' + cid)
+                if 'queued' in option:
+                    cidpath = os.path.join(queuedir,cid)
+                    threadmsg('removing ' + cidpath)
+                    os.remove(cidpath)
+                if len(cids) > 0:
+                    tslock.acquire()
+                    for id in cids:
+                        del tscids[id]
+                    tslock.release()
             pubqueue.task_done()
 
         thishour = datetime.datetime.now().hour
@@ -323,11 +344,23 @@ def cidinrepo(cid, conf):
 def repocidpath(repo, cid):
     return '/cvmfs/' + repo + '/' + prefix + '/' + cid
 
+def stamp(ip, cn, cid, conf, msg):
+    tslock.acquire()
+    if cid in tscids:
+        tslock.release()
+        logmsg(ip, cn, cid + ' already queued for timestamp, skipping')
+    else:
+        tscids[cid] = 1
+        tslock.release()
+        logmsg(ip, cn, cid + ' already present' + msg)
+        # although the cid is in the queue, the current contents of
+        # tscids will actually be used during publish, if not empty
+        pubqueue.put([cid, cn, conf, 'ts'])
+
 def queueorstamp(ip, cn, cid, conf):
     inrepo = cidinrepo(cid, conf)
     if inrepo is not None:
-        logmsg(ip, cn, cid + ' already present in ' + inrepo)
-        pubqueue.put([cid, cn, conf, 'ts,queued'])
+        stamp(ip, cn, cid, conf, ' in ' + inrepo)
         return 'PRESENT:' + repocidpath(inrepo, cid) + '\n'
     pubqueue.put([cid, cn, conf, 'queued'])
     return 'OK\n'
@@ -589,8 +622,7 @@ def dispatch(environ, start_response):
             return bad_request(start_response, ip, cn, 'update with no cid')
         inrepo = cidinrepo(cid, conf)
         if inrepo is not None:
-            logmsg(ip, cn, cid + ' present in ' + inrepo + ', updating')
-            pubqueue.put([cid, cn, conf, 'ts'])
+            stamp(ip, cn, cid, conf, ' in ' + inrepo + ', updating')
             return good_request(start_response,
                 'PRESENT:' + repocidpath(inrepo, cid) + '\n')
         logmsg(ip, cn, cid + ' missing, skipping update')
