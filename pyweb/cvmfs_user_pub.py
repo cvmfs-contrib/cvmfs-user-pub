@@ -361,6 +361,12 @@ def queueorstamp(ip, cn, cid, conf):
     inrepo = cidinrepo(cid, conf)
     if inrepo is not None:
         stamp(ip, cn, cid, conf, ' in ' + inrepo)
+        cidpath = os.path.join(queuedir,cid)
+        logmsg(ip, cn, 'removing ' + cidpath)
+        try:
+            os.remove(cidpath)
+        except OSError:
+            logmsg(ip, cn, 'removing ' + cidpath + ' failed, continuing')
         return 'PRESENT:' + repocidpath(inrepo, cid) + '\n'
     pubqueue.put([cid, cn, conf, 'queued'])
     return 'OK\n'

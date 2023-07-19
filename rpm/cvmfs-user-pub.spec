@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.14
+Version: 1.15
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -122,6 +122,11 @@ done
 
 
 %changelog
+* Wed Jul 19 2023 Dave Dykstra <dwd@fnal.gov> 1.15-1
+- Fixed bug introduced in the last update where the temporary input file
+  was not removed when the hash was already present during a publish
+  request.
+
 * Tue Jul 18 2023 Dave Dykstra <dwd@fnal.gov> 1.14-1
 - Keep track of all pending timestamp touches in a dictionary and do
   them all at once, rather than queuing a separate publish for each
