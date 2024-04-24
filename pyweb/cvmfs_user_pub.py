@@ -59,6 +59,8 @@ conflock = threading.Lock()
 pubqueue = Queue.Queue()
 tslock = threading.Lock()
 tscids = {}
+publock = threading.Lock()
+pubcids = {}
 
 def logmsg(ip, id, msg):
     print '(' + ip + ' ' + id + ') '+ msg
@@ -274,6 +276,10 @@ def publishloop(repo, reponum, conf):
                     cidpath = os.path.join(queuedir,cid)
                     threadmsg('removing ' + cidpath)
                     os.remove(cidpath)
+                    publock.acquire()
+                    if cid in pubcids:
+                        del pubcids[cid]
+                    publock.release()
                 if len(cids) > 0:
                     tslock.acquire()
                     for id in cids:
@@ -637,6 +643,27 @@ def dispatch(environ, start_response):
     if pathinfo == '/publish':
         if cid == '':
             return bad_request(start_response, ip, cn, 'publish with no cid')
+        contentlength = environ.get('CONTENT_LENGTH','0')
+        length = int(contentlength)
+        input = environ['wsgi.input']
+        publock.acquire()
+        if cid in pubcids:
+            publock.release()
+            logmsg(ip, cn, cid + ' already publishing, skipping')
+            try:
+                # read the data and throw it away
+                while length > 0:
+                    bufsize = 16384
+                    if bufsize > length:
+                        bufsize = length
+                    buf = input.read(bufsize)
+                    length -= len(buf)
+            except Exception, e:
+                logmsg(ip, cn, 'error getting publish data: ' + str(e))
+                return bad_request(start_response, ip, cn, 'error reading publish data')
+            return good_request(start_response, 'OK\n')
+        pubcids[cid] = 1
+        publock.release()
         if not os.path.exists(queuedir):
             os.mkdir(queuedir)
         ciddir = os.path.join(queuedir,os.path.dirname(cid))
@@ -644,9 +671,6 @@ def dispatch(environ, start_response):
         try:
             if not os.path.exists(ciddir):
                 os.mkdir(ciddir)
-            contentlength = environ.get('CONTENT_LENGTH','0')
-            length = int(contentlength)
-            input = environ['wsgi.input']
             with open(cidpath + '.tmp', 'w') as output:
                 while length > 0:
                     bufsize = 16384
