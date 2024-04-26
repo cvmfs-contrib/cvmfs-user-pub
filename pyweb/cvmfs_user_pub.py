@@ -29,10 +29,19 @@
 #    LABORATORY.  All rights reserved.
 # For details of the Fermitools (BSD) license see COPYING.
 
+from __future__ import print_function
+
 import os, threading, time, datetime
-import Queue, socket, subprocess, select
+import socket, subprocess, select
 import fcntl
-import urlparse, urllib
+try:
+    from urllib.parse import parse_qs
+    from urllib.parse import unquote
+    import queue
+except:  # python < 3
+    from urlparse import parse_qs
+    from urllib import unquote
+    import Queue as queue
 import shutil, re
 import scitokens
 
@@ -56,24 +65,24 @@ servicecachetime = 5 # 5 seconds
 servicestatustime = 0
 servicerunning = False
 conflock = threading.Lock()
-pubqueue = Queue.Queue()
+pubqueue = queue.Queue()
 tslock = threading.Lock()
 tscids = {}
 publock = threading.Lock()
 pubcids = {}
 
 def logmsg(ip, id, msg):
-    print '(' + ip + ' ' + id + ') '+ msg
+    print( '(' + ip + ' ' + id + ') '+ msg )
 
 def threadmsg(msg):
-    print '(' + threading.current_thread().name + ') '+ msg
+    print( '(' + threading.current_thread().name + ') '+ msg )
 
 def error_request(start_response, response_code, response_body):
     response_body = response_body + '\n'
     start_response(response_code,
                    [('Cache-control', 'max-age=0'),
                     ('Content-Length', str(len(response_body)))])
-    return [response_body]
+    return [response_body.encode('utf-8')]
 
 def bad_request(start_response, ip, id, reason):
     response_body = 'Bad request: ' + reason
@@ -86,7 +95,7 @@ def good_request(start_response, response_body):
                   [('Content-Type', 'text/plain'),
                    ('Cache-control', 'max-age=0'),
                    ('Content-Length', str(len(response_body)))])
-    return [response_body]
+    return [response_body.encode('utf-8')]
 
 def parse_conf():
     global userpubconfmodtime
@@ -109,7 +118,7 @@ def parse_conf():
             else:
                 newconf[words[0]] = [words[1]]
 
-    except Exception, e:
+    except Exception as e:
         logmsg('-', '-', 'error reading ' + userpubconffile + ', continuing: ' + str(e))
         userpubconfmodtime = savemodtime
         return userpubconf
@@ -133,7 +142,7 @@ def parse_alloweddns():
             parts = line.split('"')
             if len(parts) > 2:
                 newdns.add(parts[1])
-    except Exception, e:
+    except Exception as e:
         logmsg('-', '-', 'error reading ' + alloweddnsfile + ', continuing: ' + str(e))
         alloweddnsmodtime = savemodtime
         return alloweddns
@@ -157,7 +166,7 @@ def parse_issuers(issuersfile):
                 continue
             parts = line.split()
             newissuers.add(parts[0])
-    except Exception, e:
+    except Exception as e:
         logmsg('-', '-', 'error reading ' + issuersfile + ', continuing: ' + str(e))
         issuersmodtime = savemodtime
         return issuers
@@ -211,8 +220,8 @@ def runthreadcmd(cmd, msg):
     p = subprocess.Popen( ('/bin/bash', '-c', cmd), bufsize=1, 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for fd in (p.stdout, p.stderr):
-	flags = fcntl.fcntl(fd, fcntl.F_GETFL)
-	fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
     # the following logic is from
     #  https://stackoverflow.com/questions/23677526/checking-to-see-if-there-is-more-data-to-read-from-a-file-descriptor-using-pytho
@@ -220,13 +229,13 @@ def runthreadcmd(cmd, msg):
         ready, _, _ = select.select((p.stdout, p.stderr), (), ())
         for fd in (p.stdout, p.stderr):
             if fd in ready:
-                data = fd.read()  # non-blocking
+                data = fd.read().decode('utf-8')  # non-blocking
                 if data:
-		    lines = data.split('\n')
-		    for line in lines:
-			threadmsg(line)
+                    lines = data.split('\n')
+                    for line in lines:
+                        threadmsg(line)
                 elif p.returncode is not None:
-                    ready = filter(lambda x: x is not fd, ready)
+                    ready = [x for x in ready if x is not fd]
         if p.poll() is not None and not ready:
             break
 
@@ -244,7 +253,7 @@ def publishloop(repo, reponum, conf):
         cid = None
         try:
             cid, cn, conf, option = pubqueue.get(True, 60)
-        except Queue.Empty, e:
+        except queue.Empty as e:
             # cid will be None in this case
             pass
 
@@ -462,7 +471,7 @@ def dispatch(environ, start_response):
 
     parameters = {}
     if 'QUERY_STRING' in environ:
-        parameters = urlparse.parse_qs(urllib.unquote(environ['QUERY_STRING']))
+        parameters = parse_qs(unquote(environ['QUERY_STRING']))
 
     global servicerunning
     global servicestatustime
@@ -544,7 +553,7 @@ def dispatch(environ, start_response):
         try:
             header = environ['HTTP_AUTHORIZATION']
             scheme, tokenstr = header.split(' ', 1)
-        except Exception, e:
+        except Exception as e:
             logmsg(ip, '-', 'Failure parsing Authorization header ' + header + ': ' + str(e))
             return error_request(start_response, '403 Access denied', 'Failure to parse Authorization')
         if scheme.lower() != 'bearer':
@@ -567,7 +576,7 @@ def dispatch(environ, start_response):
                 logmsg(ip, '-', 'compute.create scope missing from token')
                 return error_request(start_response, '403 Access denied', 'compute.create scope missing from token')
             cn = token['sub']
-        except Exception, e:
+        except Exception as e:
             logmsg(ip, '-', 'error decoding token: ' + str(e))
             return error_request(start_response, '403 Access denied', 'Error decoding token: ' + str(e))
     elif 'SSL_CLIENT_S_DN' not in environ:
@@ -658,7 +667,7 @@ def dispatch(environ, start_response):
                         bufsize = length
                     buf = input.read(bufsize)
                     length -= len(buf)
-            except Exception, e:
+            except Exception as e:
                 logmsg(ip, cn, 'error getting publish data: ' + str(e))
                 return bad_request(start_response, ip, cn, 'error reading publish data')
             return good_request(start_response, 'OK\n')
@@ -671,7 +680,7 @@ def dispatch(environ, start_response):
         try:
             if not os.path.exists(ciddir):
                 os.mkdir(ciddir)
-            with open(cidpath + '.tmp', 'w') as output:
+            with open(cidpath + '.tmp', 'wb') as output:
                 while length > 0:
                     bufsize = 16384
                     if bufsize > length:
@@ -681,7 +690,7 @@ def dispatch(environ, start_response):
                     length -= len(buf)
             os.rename(cidpath + '.tmp', cidpath)
             logmsg(ip, cn, 'wrote ' + contentlength + ' bytes to ' + cidpath)
-        except Exception, e:
+        except Exception as e:
             logmsg(ip, cn, 'error getting publish data: ' + str(e))
             try:
                 os.remove(cidpath + '.tmp')
