@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.15
+Version: 1.16
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -11,20 +11,17 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Source0: https://github.com/cvmfs-contrib/%{name}/releases/download/%{version}/%{name}-%{version}.tar.gz
 
 Requires: httpd
+%if %{rhel} > 7
+Requires: python3-mod_wsgi
+Requires: python3-scitokens
+%else
 Requires: mod_wsgi
+Requires: python2-scitokens
+%endif
 Requires: mod_ssl
-# 2.7.0 is needed for setting geoip DB to NONE for add-replica
 Requires: cvmfs-server >= 2.10.1
 # require similar cvmfs version also for consistency
 Requires: cvmfs >= 2.10.1
-%if 0%{?el8}
-Requires: python2
-%endif
-%if 0%{?el7}
-# only require on el7 because el8 only has python3-scitokens
-# when el8 needs to be supported, convert everything to python3
-Requires: python2-scitokens
-%endif
 
 %description
 Accepts tarballs from authenticated users and publishes them in a cvmfs
@@ -122,6 +119,11 @@ done
 
 
 %changelog
+* Fri Apr 26 2024 Dave Dykstra <dwd@fnal.gov> 1.16-1
+- Add lock on publishes, to avoid attempting to publish the same cid more
+  than once at the same time.
+- Use python3 on el8 and above.
+
 * Wed Jul 19 2023 Dave Dykstra <dwd@fnal.gov> 1.15-1
 - Fixed bug introduced in the last update where the temporary input file
   was not removed when the hash was already present during a publish

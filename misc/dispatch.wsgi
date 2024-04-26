@@ -1,4 +1,3 @@
-#! /usr/bin/env python2
 #
 # This source file is Copyright (c) 2019, FERMI NATIONAL ACCELERATOR
 #    LABORATORY.  All rights reserved.
