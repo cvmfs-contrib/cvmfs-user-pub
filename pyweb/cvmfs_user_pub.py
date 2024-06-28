@@ -217,7 +217,7 @@ def cidexpired(cid, conf, now):
 
 def runthreadcmd(cmd, msg):
     threadmsg(cmd)
-    p = subprocess.Popen( ('/bin/bash', '-c', cmd), bufsize=1, 
+    p = subprocess.Popen( ('/bin/bash', '-c', cmd),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for fd in (p.stdout, p.stderr):
         flags = fcntl.fcntl(fd, fcntl.F_GETFL)

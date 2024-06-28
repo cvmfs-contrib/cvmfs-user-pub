@@ -119,6 +119,8 @@ done
 
 
 %changelog
+# - Remove RuntimeWarning about buffering not supported in binary mode.
+
 * Fri Apr 26 2024 Dave Dykstra <dwd@fnal.gov> 1.16-1
 - Add lock on publishes, to avoid attempting to publish the same cid more
   than once at the same time.
