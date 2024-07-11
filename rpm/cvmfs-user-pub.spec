@@ -1,6 +1,6 @@
 Summary: CVMFS user publication service
 Name: cvmfs-user-pub
-Version: 1.16
+Version: 1.17
 # The release_prefix macro is used in the OBS prjconf, don't change its name
 %define release_prefix 1
 Release: %{release_prefix}%{?dist}
@@ -119,7 +119,11 @@ done
 
 
 %changelog
-# - Remove RuntimeWarning about buffering not supported in binary mode.
+* Thu Jul 11 2024 Dave Dykstra <dwd@fnal.gov> 1.17-1
+- Allow tarball publishes for tarballs bigger than 1GB.  That limit
+  was a new default for LimitRequestBody that was added in apache 2.4.53;
+  before that it was unlimited.
+- Remove RuntimeWarning about buffering not supported in binary mode.
 
 * Fri Apr 26 2024 Dave Dykstra <dwd@fnal.gov> 1.16-1
 - Add lock on publishes, to avoid attempting to publish the same cid more
